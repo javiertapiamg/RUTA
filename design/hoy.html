@@ -117,17 +117,39 @@ header{display:flex;align-items:flex-start;justify-content:space-between;gap:16p
   border:1px solid var(--edge);border-radius:999px;padding:4px 9px;background:rgba(255,255,255,.34)}
 
 .wheel-wrap{position:relative;width:100%;aspect-ratio:1;max-width:420px;margin:2px auto 0;touch-action:pan-y}
-.aura{position:absolute;left:50%;top:50%;width:84%;aspect-ratio:1;transform:translate(-50%,-50%);
+.aura{position:absolute;left:50%;top:50%;width:86%;aspect-ratio:1;transform:translate(-50%,-50%);
   border-radius:50%;pointer-events:none;
   background:conic-gradient(from 0deg,#FFD4E6,#CDE7FF,#D4F7E8,#FFEFD2,#E4D8FF,#FFD4E6);
-  filter:blur(34px);opacity:.5;animation:spin 46s linear infinite}
+  animation:spin 46s linear infinite,auraPulse 9s ease-in-out infinite}
 @keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .aura{opacity:.3}}
-:root[data-theme="dark"] .aura{opacity:.3}
+@keyframes auraPulse{0%,100%{opacity:.42;filter:blur(30px)}50%{opacity:.66;filter:blur(44px)}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .aura{animation:spin 46s linear infinite,auraPulseD 9s ease-in-out infinite}}
+:root[data-theme="dark"] .aura{animation:spin 46s linear infinite,auraPulseD 9s ease-in-out infinite}
+@keyframes auraPulseD{0%,100%{opacity:.24;filter:blur(34px)}50%{opacity:.4;filter:blur(48px)}}
+
+/* brillo que barre el cristal */
+.sheen{position:absolute;left:50%;top:50%;width:72%;aspect-ratio:1;transform:translate(-50%,-50%);
+  border-radius:50%;pointer-events:none;mix-blend-mode:overlay;animation:spin 13s linear infinite;
+  background:conic-gradient(from 0deg,rgba(255,255,255,0) 0deg,rgba(255,255,255,.62) 34deg,
+    rgba(255,255,255,0) 98deg,rgba(255,255,255,0) 360deg);
+  -webkit-mask:radial-gradient(circle,transparent 29%,#000 33%,#000 97%,transparent 100%);
+  mask:radial-gradient(circle,transparent 29%,#000 33%,#000 97%,transparent 100%)}
+
+/* destellos */
+.spark{position:absolute;width:3px;height:3px;border-radius:50%;background:#fff;pointer-events:none;
+  box-shadow:0 0 7px rgba(255,255,255,.95),0 0 14px rgba(200,225,255,.6);opacity:0;
+  animation:twinkle 6s ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:0;transform:translate(-50%,-50%) scale(.5)}
+  50%{opacity:.95;transform:translate(-50%,-50%) scale(1.25)}}
+
 svg.wheel{position:absolute;inset:14%;width:72%;height:72%;overflow:visible;cursor:pointer}
-svg.wheel .ring{transition:fill-opacity .25s}
+svg.wheel .ring{transition:fill-opacity .5s cubic-bezier(.2,.8,.3,1),fill .5s}
 @keyframes bloom{from{opacity:0}to{opacity:1}}
-.sector{transform-box:fill-box}
+.sector{animation:glow var(--gd,7s) ease-in-out infinite;animation-delay:var(--gdl,0s)}
+@keyframes glow{0%,100%{filter:drop-shadow(0 0 2px var(--gc))}50%{filter:drop-shadow(0 0 11px var(--gc))}}
+.sector.hot{animation-duration:2.1s}
+@keyframes glow-hot{0%,100%{filter:drop-shadow(0 0 8px var(--gc))}50%{filter:drop-shadow(0 0 20px var(--gc))}}
+.sector.hot{animation-name:glow-hot}
 
 .lbl{position:absolute;display:flex;align-items:center;gap:6px;font-size:9px;font-weight:700;
   letter-spacing:.14em;text-transform:uppercase;color:var(--fg-dim);line-height:1.3;
@@ -230,6 +252,7 @@ button:focus-visible,.hab:focus-visible{outline:2px solid var(--c-proyectos);out
     <div class="wheel-wrap" id="wrap">
       <div class="aura" aria-hidden="true"></div>
       <svg class="wheel" id="wheel" viewBox="0 0 400 400" role="img" aria-label="Rueda de la vida, ocho áreas"></svg>
+      <div class="sheen" aria-hidden="true"></div>
     </div>
     <div class="readout" id="readout">
       <div class="hint">Desliza el dedo sobre la rueda para explorar. Toca un anillo para puntuar.</div>
@@ -369,7 +392,31 @@ function arc(r0,r1,a0,a1){
 }
 
 const sv=document.getElementById("wheel"), wrap=document.getElementById("wrap");
-let groups=[], hot=-1;
+let groups=[], rings=[], hot=-1, avgShown=0;
+
+/* pinta un sector sin reconstruir nada; con ola si viene de un cambio */
+function paint(i,wave){
+  const a=AREAS[i];
+  rings[i].forEach((el,idx)=>{
+    const r=idx+1, on=r<=a.s;
+    const apply=()=>{
+      el.setAttribute("fill",on?`url(#g${i})`:"currentColor");
+      el.setAttribute("fill-opacity",on?(.3+.07*r).toFixed(2):".055");
+    };
+    if(wave)setTimeout(apply,idx*42);else apply();
+  });
+}
+function setAvg(){
+  const t=AREAS.reduce((x,y)=>x+y.s,0)/AREAS.length;
+  const el=document.getElementById("avg");if(!el)return;
+  const from=avgShown, t0=performance.now();
+  (function step(now){
+    const p=Math.min(1,(now-t0)/600), e=1-Math.pow(1-p,3);
+    const v=from+(t-from)*e;
+    el.textContent=v.toFixed(1);
+    if(p<1)requestAnimationFrame(step);else avgShown=t;
+  })(t0);
+}
 
 function build(){
   sv.innerHTML="";
@@ -387,21 +434,25 @@ function build(){
      <feGaussianBlur stdDeviation="3"/></filter>`;
   sv.appendChild(defs);
 
-  groups=[];
+  groups=[];rings=[];
   AREAS.forEach((a,i)=>{
     const g=document.createElementNS(NS,"g");
     g.setAttribute("class","sector");g.dataset.i=i;
+    g.style.setProperty("--gc",cvar(a.c)+"88");
+    g.style.setProperty("--gd",(6.2+i*0.42).toFixed(1)+"s");
+    g.style.setProperty("--gdl",(-i*0.9).toFixed(1)+"s");
     const a0=i*SW+GAP/2, a1=(i+1)*SW-GAP/2;
     let h="";
     for(let r=1;r<=RINGS;r++){
-      const on=r<=a.s, d=(.3+r*.04+i*.035).toFixed(2);
+      const d=(.3+r*.04+i*.035).toFixed(2);
       h+=`<path class="ring" d="${arc(R0+(r-1)*STEP+1.4,R0+r*STEP,a0,a1)}"
-        fill="${on?`url(#g${i})`:"currentColor"}" fill-opacity="${on?(.3+.07*r).toFixed(2):".055"}"
         data-i="${i}" data-r="${r}" style="animation:bloom .7s ease-out ${d}s both">
         <title>${a.n} — ${r}</title></path>`;
     }
     g.innerHTML=h;
     sv.appendChild(g);groups.push(g);
+    rings.push(Array.prototype.slice.call(g.querySelectorAll(".ring")));
+    paint(i,false);
   });
 
   /* guías concéntricas */
@@ -434,17 +485,15 @@ function build(){
   core.setAttribute("pointer-events","none");
   const avg=(AREAS.reduce((x,y)=>x+y.s,0)/AREAS.length).toFixed(1);
   core.innerHTML=
-    `<ellipse cx="${CX}" cy="${CY+CORE*.72}" rx="${CORE*.82}" ry="${CORE*.2}" fill="rgba(20,24,40,.22)" filter="url(#soft)"/>
-     <circle cx="${CX}" cy="${CY}" r="${CORE}" fill="url(#core)"/>
-     <circle cx="${CX}" cy="${CY}" r="${CORE}" fill="none" stroke="rgba(255,255,255,.3)" stroke-width=".9"/>
-     <ellipse cx="${CX-CORE*.3}" cy="${CY-CORE*.44}" rx="${CORE*.44}" ry="${CORE*.24}"
-       fill="rgba(255,255,255,.17)" transform="rotate(-24 ${CX-CORE*.3} ${CY-CORE*.44})"/>
+    `<ellipse cx="${CX}" cy="${CY+CORE*.78}" rx="${CORE*.86}" ry="${CORE*.22}" fill="rgba(16,20,36,.26)" filter="url(#soft)"/>
+     <circle cx="${CX}" cy="${CY}" r="${CORE}" fill="#000"/>
      <text id="avg" x="${CX}" y="${CY+5}" text-anchor="middle" font-size="27" font-weight="200"
        letter-spacing="-1" fill="#fff" font-family="${cvar("--ui")}">${avg}</text>
      <text x="${CX}" y="${CY+21}" text-anchor="middle" font-size="7" font-weight="700"
-       letter-spacing="2.4" fill="rgba(255,255,255,.58)" font-family="${cvar("--ui")}">EQUILIBRIO</text>`;
+       letter-spacing="2.4" fill="rgba(255,255,255,.55)" font-family="${cvar("--ui")}">EQUILIBRIO</text>`;
   sv.appendChild(core);
   sv.style.color=cvar("--fg");
+  avgShown=+avg;
 }
 
 /* ── etiquetas alrededor ── */
@@ -464,6 +513,23 @@ function labels(){
   });
 }
 
+/* ── destellos ── */
+function sparks(){
+  wrap.querySelectorAll(".spark").forEach(e=>e.remove());
+  for(let i=0;i<14;i++){
+    const ang=Math.random()*360, rr=33+Math.random()*19;
+    const s=document.createElement("span");
+    s.className="spark";
+    s.style.left=(50+Math.cos(rad(ang))*rr)+"%";
+    s.style.top=(50+Math.sin(rad(ang))*rr)+"%";
+    s.style.animationDelay=(-Math.random()*6).toFixed(2)+"s";
+    s.style.animationDuration=(4.5+Math.random()*4).toFixed(1)+"s";
+    const sz=(1.6+Math.random()*2.4).toFixed(1)+"px";
+    s.style.width=sz;s.style.height=sz;
+    wrap.appendChild(s);
+  }
+}
+
 /* ── flotación por área ── */
 const phase=AREAS.map((_,i)=>i*0.83+Math.random()*0.4);
 const lift=AREAS.map(()=>0);
@@ -478,9 +544,7 @@ function loop(t){
     const mid=rad(i*SW+SW/2);
     const dx=Math.cos(mid)*out, dy=Math.sin(mid)*out;
     g.setAttribute("transform",
-      `translate(${dx.toFixed(2)} ${dy.toFixed(2)}) rotate(${swirl.toFixed(2)} ${CX} ${CY}) scale(${(1+lift[i]*0.016).toFixed(4)})`);
-    g.style.transformOrigin=CX+"px "+CY+"px";
-    g.style.filter=lift[i]>0.04?`drop-shadow(0 0 ${(lift[i]*12).toFixed(1)}px ${cvar(AREAS[i].c)}66)`:"";
+      `translate(${dx.toFixed(2)} ${dy.toFixed(2)}) rotate(${swirl.toFixed(2)} ${CX} ${CY})`);
   });
   requestAnimationFrame(loop);
 }
@@ -491,6 +555,7 @@ function setHot(i){
   if(i===hot)return;
   hot=i;
   wrap.querySelectorAll(".lbl").forEach(el=>el.classList.toggle("hot",+el.dataset.i===i));
+  groups.forEach((g,gi)=>g.classList.toggle("hot",gi===i));
   if(i<0){
     readout.innerHTML='<div class="hint">Desliza el dedo sobre la rueda para explorar. Toca un anillo para puntuar.</div>';
     return;
@@ -512,10 +577,11 @@ wrap.addEventListener("pointermove",e=>setHot(angleAt(e)));
 wrap.addEventListener("pointerleave",()=>setHot(-1));
 sv.addEventListener("click",e=>{
   const p=e.target.closest("[data-r]");if(!p)return;
-  const a=AREAS[+p.dataset.i], v=+p.dataset.r;
+  const i=+p.dataset.i, a=AREAS[i], v=+p.dataset.r;
   blip(v>a.s);
   a.s=(a.s===v?v-1:v);
-  const keep=hot; build();labels();hot=-1;setHot(keep);
+  paint(i,true);setAvg();
+  readout.innerHTML=`<div class="ttl" style="color:${cvar(a.c)}">${a.n} · ${a.s}</div><div class="txt">${a.w}</div>`;
 });
 
 /* ── hábitos ── */
@@ -560,7 +626,7 @@ tb.addEventListener("click",()=>{
   blip(!dark);build();labels();
 });
 
-build();labels();drawHabits();drawBars();
+build();labels();sparks();drawHabits();drawBars();
 if(!reduce)requestAnimationFrame(loop);
 })();
 </script>
