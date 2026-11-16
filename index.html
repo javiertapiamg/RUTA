@@ -14,6 +14,8 @@
 </head>
 <body>
 
+<div class="bgphoto" id="bgphoto" aria-hidden="true"></div>
+<div class="bgveil" aria-hidden="true"></div>
 <div class="field" aria-hidden="true">
   <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
   <span class="blob b4"></span><span class="blob b5"></span>
@@ -38,11 +40,12 @@
 
 <!-- ═════════ app ═════════ -->
 <div class="wrap" id="app" hidden>
-  <header class="rise d1">
+  <header class="glass bar rise d1">
     <div><h1 class="mark">Ruta</h1><div class="date" id="date">—</div></div>
     <div class="cd"><b id="cd">—</b><span id="cdl">—</span></div>
   </header>
 
+  <div class="views" id="views">
   <!-- HOY -->
   <section class="view" id="v-hoy">
     <section class="glass quote rise d1"><p id="qt">—</p><cite id="qa">—</cite></section>
@@ -60,7 +63,7 @@
       <div class="readout" id="readout"></div>
     </section>
 
-    <section class="glass card rise d3">
+    <section class="glass card habits-card rise d3">
       <h2>Hábitos de hoy</h2>
       <div class="habits" id="habits"></div>
       <div class="diff-row">
@@ -70,11 +73,11 @@
       <div class="streak"><span class="bars" id="bars"></span><em id="streakTxt">—</em></div>
     </section>
 
-    <section class="glass card rise d4">
+    <section class="glass card tasks-card rise d4">
       <h2>Para hoy</h2>
       <ul class="tasks" id="tasks"></ul>
       <form class="add" id="addForm" autocomplete="off">
-        <input class="inp" id="newTask" type="text" placeholder="Agregar algo para hoy" maxlength="140">
+        <input class="inp" id="newTask" type="text" placeholder="Agregar tarea" maxlength="140">
         <input class="inp" id="newTime" type="time" aria-label="Hora (opcional)">
         <div class="urgs" id="urgs" role="group" aria-label="Urgencia"></div>
         <button class="btn" type="submit">Agregar</button>
@@ -84,6 +87,9 @@
     <section class="glass next rise d5" id="nextCard">
       <div class="next-photo">
         <div class="ph" id="ph"></div><div class="veil"></div>
+        <button type="button" class="photo-btn" id="heroPhotoBtn" aria-label="Cambiar la foto de esta meta" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5h3l1.6-2.4h6.8L17 8.5h3v10H4z"/><circle cx="12" cy="13.2" r="3.2"/></svg>
+        </button>
         <div class="cap"><b id="heroT">—</b><span id="heroS">—</span></div>
       </div>
       <ul id="nextList"></ul>
@@ -97,14 +103,20 @@
   <section class="view" id="v-agenda" hidden><section class="glass soon rise d1"><b>Agenda</b><p>Tu calendario, con urgencias, y lo que agendes por Telegram.</p></section></section>
   <section class="view" id="v-capital" hidden><section class="glass soon rise d1"><b>Capital</b><p>Ahorro, ingresos, metas logradas y el historial de pegas.</p></section></section>
 
+  </div>
+
   <p class="foot">
-    <button type="button" id="theme">modo oscuro</button> ·
+    <button type="button" id="theme">modo oscuro</button>
+    <button type="button" id="bgBtn">poner foto de fondo</button>
+    <button type="button" id="bgOff" hidden>quitar fondo</button>
     <button type="button" id="logout">cerrar sesión</button>
   </p>
+  <input type="file" id="filePick" accept="image/*" hidden>
 </div>
 
 <nav class="nav" id="nav" aria-label="Vistas" hidden>
-  <div class="pill glass">
+  <div class="pill glass" id="pill">
+    <span class="thumb" aria-hidden="true"></span>
     <button type="button" data-v="hoy" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="3.4"/><path d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6M18.8 12h2.6M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8"/></svg>Hoy</button>
     <button type="button" data-v="vida"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="3.6"/><path d="M12 3.4v5M12 15.6v5M3.4 12h5M15.6 12h5"/></svg>Vida</button>
     <button type="button" data-v="suenos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5l5.5-6.5 4 3.2 3.4-5.2L21 17.5z"/><circle cx="7.2" cy="6.4" r="1.9"/></svg>Sueños</button>

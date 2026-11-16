@@ -103,7 +103,7 @@ body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:15px;l
 /* ── encabezado ───────────────────────── */
 header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px;padding:0 6px}
 .mark{font-size:14px;font-weight:700;letter-spacing:.36em;margin:0;text-transform:uppercase}
-.date{font-size:12.5px;color:var(--fg-faint);margin-top:5px;text-transform:capitalize;font-weight:500}
+.date{font-size:12.5px;color:var(--fg-faint);margin-top:5px;font-weight:500}
 .cd{text-align:right;flex:none}
 .cd b{display:block;font-size:36px;font-weight:200;line-height:.92;font-variant-numeric:tabular-nums;letter-spacing:-.035em}
 .cd span{display:block;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-faint);margin-top:7px;font-weight:600}
@@ -345,3 +345,171 @@ html,body{min-height:100%}
   border-radius:999px;padding:10px 18px;transition:opacity .3s,transform .3s}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 .loading{opacity:.5;transition:opacity .3s}
+
+/* ═════════ upgrade: web · cristal con cuerpo · fotos · transiciones ═════════ */
+:root{
+  --spec:rgba(255,255,255,.58); --spec2:rgba(255,255,255,.2);
+  --rim:rgba(255,255,255,.55);  --rim2:rgba(255,255,255,.24);
+  --depth:rgba(110,130,190,.3);
+  --veil:rgba(243,244,247,.28); --veil2:rgba(243,244,247,.5);
+  --thumb:linear-gradient(140deg,rgba(255,255,255,.95),rgba(255,255,255,.5));
+  --thumb-sh:0 6px 16px -8px rgba(30,40,80,.4),inset 0 1px 0 #fff;
+  --chip:rgba(255,255,255,.5);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --spec:rgba(255,255,255,.1); --spec2:rgba(255,255,255,.04);
+    --rim:rgba(255,255,255,.1);  --rim2:rgba(255,255,255,.05);
+    --depth:rgba(0,0,0,.5);
+    --veil:rgba(10,12,18,.5); --veil2:rgba(10,12,18,.72);
+    --thumb:linear-gradient(140deg,rgba(255,255,255,.18),rgba(255,255,255,.08));
+    --thumb-sh:inset 0 1px 0 rgba(255,255,255,.2);
+    --chip:rgba(255,255,255,.07);
+  }
+}
+:root[data-theme="dark"]{
+  --spec:rgba(255,255,255,.1); --spec2:rgba(255,255,255,.04);
+  --rim:rgba(255,255,255,.1);  --rim2:rgba(255,255,255,.05);
+  --depth:rgba(0,0,0,.5);
+  --veil:rgba(10,12,18,.5); --veil2:rgba(10,12,18,.72);
+  --thumb:linear-gradient(140deg,rgba(255,255,255,.18),rgba(255,255,255,.08));
+  --thumb-sh:inset 0 1px 0 rgba(255,255,255,.2);
+  --chip:rgba(255,255,255,.07);
+}
+
+/* cristal: reflejo diagonal, canto con grosor, sombra en dos capas */
+.glass{
+  background:
+    linear-gradient(118deg,var(--spec) 0%,rgba(255,255,255,0) 23%),
+    linear-gradient(304deg,var(--spec2) 0%,rgba(255,255,255,0) 30%),
+    linear-gradient(152deg,var(--glass),var(--glass-2));
+  backdrop-filter:blur(34px) saturate(2) brightness(1.04);
+  -webkit-backdrop-filter:blur(34px) saturate(2) brightness(1.04);
+  box-shadow:
+    0 1px 2px rgba(20,26,50,.06),
+    0 14px 30px -16px rgba(30,36,60,.24),
+    0 40px 80px -40px rgba(30,36,60,.36),
+    inset 0 1.5px 0 var(--hair),
+    inset 1.5px 0 0 var(--rim),
+    inset 0 0 0 1px var(--rim2),
+    inset 0 -16px 28px -20px var(--depth),
+    inset -1px -1.5px 0 var(--edge);
+}
+
+/* foto de fondo */
+.bgphoto{position:fixed;inset:-6%;z-index:-3;background-size:cover;background-position:center;
+  opacity:0;transition:opacity 1.4s ease;will-change:transform;
+  animation:ken 70s ease-in-out infinite alternate}
+.bgphoto.on{opacity:1}
+@keyframes ken{from{transform:scale(1) translate3d(0,0,0)}to{transform:scale(1.09) translate3d(-1.6%,-1.2%,0)}}
+.bgveil{position:fixed;inset:0;z-index:-3;pointer-events:none;opacity:0;transition:opacity 1.4s ease;
+  background:linear-gradient(180deg,var(--veil),var(--veil2))}
+body.has-photo .bgveil{opacity:1}
+body.has-photo .blob{opacity:.22}
+
+/* barra superior de cristal */
+.bar{padding:15px 22px;border-radius:26px;align-items:center;margin-bottom:16px}
+
+/* pie como fichas */
+.foot{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:10px 0 2px}
+.foot button{text-decoration:none;font-size:11.5px;font-weight:600;color:var(--fg-dim);
+  background:var(--chip);border:1px solid var(--edge);border-radius:999px;padding:7px 14px;
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);transition:color .2s,transform .2s}
+.foot button:active{transform:scale(.95)}
+
+/* botón de foto sobre la meta */
+.photo-btn{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;
+  display:grid;place-items:center;cursor:pointer;color:#fff;border:1px solid rgba(255,255,255,.5);
+  background:rgba(20,22,30,.28);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transition:transform .2s,background .2s;padding:0}
+.photo-btn svg{width:18px;height:18px}
+.photo-btn:active{transform:scale(.92)}
+.photo-btn.busy{animation:soft 1s ease-in-out infinite;opacity:.6;pointer-events:none}
+.next-photo .ph{background-size:cover;background-position:center}
+
+/* navegación: pastilla que se desliza */
+.nav .pill{position:relative}
+.nav .thumb{position:absolute;top:7px;bottom:7px;left:7px;width:calc((100% - 22px)/5);border-radius:999px;
+  background:var(--thumb);box-shadow:var(--thumb-sh);pointer-events:none;
+  transform:translateX(calc(var(--i,0)*(100% + 2px)));
+  transition:transform .55s cubic-bezier(.3,1.35,.45,1)}
+.nav button{position:relative;z-index:1}
+.nav .pill button[aria-current="page"]{background:none!important;animation:none}
+
+/* transición entre vistas: cada panel entra y sale por su cuenta, así el cristal no pierde su desenfoque */
+.view.leave > *{animation:vOut .2s cubic-bezier(.4,0,.9,.5) both}
+.view.enter > *{animation:vIn .6s cubic-bezier(.16,.84,.3,1) both}
+.view.enter > :nth-child(2){animation-delay:.05s}
+.view.enter > :nth-child(3){animation-delay:.1s}
+.view.enter > :nth-child(4){animation-delay:.15s}
+.view.enter > :nth-child(5){animation-delay:.2s}
+@keyframes vOut{to{opacity:0;transform:translateX(calc(var(--dir,1)*-40px)) scale(.985);filter:blur(8px)}}
+@keyframes vIn{from{opacity:0;transform:translateX(calc(var(--dir,1)*60px)) scale(.985);filter:blur(10px)}}
+
+/* tareas: fila con aire */
+.task{border-radius:14px;padding:11px 8px;margin:0 -6px;transition:background .2s}
+
+@media (hover:hover){
+  .hab:hover{transform:translateY(-2px)}
+  .task:hover{background:var(--chip)}
+  .nav button:hover,.foot button:hover,.lbl:hover .in{color:var(--fg)}
+  .photo-btn:hover{background:rgba(20,22,30,.5)}
+  .diff-btn:hover{color:var(--fg)}
+}
+
+/* ── tablet ── */
+.wrap{max-width:720px}
+
+/* ── escritorio: la rueda manda ── */
+@media (min-width:1040px){
+  .wrap{max-width:1340px;
+    padding-left:max(36px,env(safe-area-inset-left,0px));
+    padding-right:max(36px,env(safe-area-inset-right,0px));
+    padding-block:28px calc(126px + env(safe-area-inset-bottom,0px))}
+  .bar{padding:18px 28px;margin-bottom:18px}
+  .mark{font-size:16px}
+  .date{font-size:13.5px}
+  .cd b{font-size:44px}
+
+  #v-hoy{display:grid;gap:18px;align-items:start;
+    grid-template-columns:minmax(0,1.14fr) minmax(0,.6fr) minmax(0,.6fr)}
+  #v-hoy > .glass{margin-bottom:0}
+  #v-hoy > .wheel-card{grid-column:1;grid-row:1 / span 3;position:sticky;top:20px;padding:22px 22px 20px}
+  #v-hoy > .quote{grid-column:2 / span 2;padding:28px 30px 26px}
+  #v-hoy > .habits-card{grid-column:2}
+  #v-hoy > .tasks-card{grid-column:3}
+  #v-hoy > .next{grid-column:2 / span 2}
+
+  .quote p{font-size:25px}
+  .wheel-wrap{max-width:min(620px,calc(100vh - 250px))}
+  .lbl{max-width:130px}
+  .lbl .in{font-size:10.5px;gap:7px}
+  .lbl i{width:8px;height:8px}
+  .readout{min-height:78px;padding-top:16px}
+  .readout .ttl{font-size:18px}
+  .readout .txt{font-size:14px}
+  .readout .hint{font-size:13px}
+  .habits{grid-template-columns:1fr}
+  .hab{padding:15px 15px}
+  .hab .txt b{font-size:14.5px}
+  .next-photo{height:210px}
+  .next-photo .cap b{font-size:22px}
+  .nav .pill{max-width:500px;padding:8px}
+  .nav .thumb{top:8px;bottom:8px;left:8px;width:calc((100% - 24px)/5)}
+  .nav button{font-size:10.5px;padding:9px 2px}
+  .nav button svg{width:21px;height:21px}
+  .soon{padding:70px 24px}
+  .view:not(#v-hoy){max-width:760px;margin:0 auto}
+}
+
+/* fichas y controles: mismo material en claro y oscuro */
+.sample,.back,.diff-btn,.urgs button{background:var(--chip)}
+:root[data-theme="dark"] .hab[aria-pressed="false"] .box{background:rgba(255,255,255,.06)}
+:root[data-theme="dark"] .sheen{opacity:.3}
+.cd span{max-width:230px;margin-left:auto}
+
+/* con foto de fondo: cristal un poco más denso para que todo se lea */
+:root[data-theme="light"] body.has-photo,:root:not([data-theme]) body.has-photo{
+  --glass:rgba(255,255,255,.7);--glass-2:rgba(255,255,255,.46);--fg-faint:#757D90;--fg-dim:#4B5263}
+:root[data-theme="dark"] body.has-photo{
+  --glass:rgba(16,18,27,.62);--glass-2:rgba(16,18,27,.44);--fg-faint:#9AA2B6;--fg-dim:#C0C6D6;--chip:rgba(255,255,255,.1)}
