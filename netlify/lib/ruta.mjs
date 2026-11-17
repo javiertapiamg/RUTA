@@ -159,3 +159,73 @@ export async function daySummary(uid) {
   }
   return lines.join("\n");
 }
+
+/* ───────── quién llama desde la app (token de sesión de Supabase) ───────── */
+export async function authUser(req) {
+  const h = req.headers.get("authorization") || "";
+  const tok = h.replace(/^Bearer\s+/i, "");
+  if (!tok) return null;
+  const r = await fetch(`${SB}/auth/v1/user`, { headers: { apikey: KEY, Authorization: `Bearer ${tok}` } });
+  if (!r.ok) return null;
+  const u = await r.json();
+  return u && u.id ? u : null;
+}
+export const json = (o, status = 200) =>
+  new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
+
+/* ───────── Claude ───────── */
+export const hasClaude = () => !!process.env.ANTHROPIC_API_KEY;
+export async function claude({ system, messages, tools, tool_choice, max_tokens = 900 }) {
+  const body = { model: process.env.CLAUDE_MODEL || "claude-sonnet-5-5", max_tokens, system, messages };
+  if (tools) body.tools = tools;
+  if (tool_choice) body.tool_choice = tool_choice;
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`claude ${r.status}: ${txt.slice(0, 300)}`);
+  return JSON.parse(txt);
+}
+export const textOf = m => (m.content || []).filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+
+/* ───────── contexto de la vida de alguien, para Claude ───────── */
+export const AREAS = {
+  proyectos: "Proyectos propios", oficio: "Oficio", plata: "Plata", aprendizaje: "Aprendizaje",
+  perros: "Perros", cuerpo: "Cuerpo", presto: "Presto", vinculos: "Vínculos"
+};
+const DIAS_L = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+export function nowLine() {
+  const t = today();
+  return `Ahora en Santiago: ${DIAS_L[t.wd]} ${ymd(t)} ${pad(t.h)}:${pad(t.mi)}.`;
+}
+export const VOZ = `Eres la voz de RUTA, una app personal de vida (hábitos, agenda, sueños, plata, diario). Le hablas a su dueño de tú, en español de Chile, cercano y directo, sin sonar a terapeuta ni a coach motivacional. Nada de emojis salvo que sumen. Te basas solo en lo que dicen sus datos; si algo no está, no lo inventas.`;
+export async function lifeContext(uid, { journal = 8 } = {}) {
+  const t = today(), from = addDays(t, -7), to = addDays(t, 15);
+  const [tasks, days, areas, goals, jr] = await Promise.all([
+    db(`tasks?select=id,title,starts_at,all_day,urgency,done&user_id=eq.${uid}` +
+       `&starts_at=gte.${q(localToUtc(from.y, from.m, from.d).toISOString())}&starts_at=lt.${q(localToUtc(to.y, to.m, to.d).toISOString())}` +
+       `&order=starts_at.asc&limit=60`),
+    db(`days?select=day,habits,kind,note&user_id=eq.${uid}&day=gte.${ymd(from)}&order=day.asc`),
+    db(`areas?select=key,score,goal,note&user_id=eq.${uid}`),
+    db(`goals?select=title,kind,area,due,done&user_id=eq.${uid}&done=is.false&order=due.asc.nullslast&limit=15`),
+    journal ? db(`journal?select=day,body&user_id=eq.${uid}&order=created_at.desc&limit=${journal}`) : []
+  ]);
+  const L = [];
+  const st = (await db(`settings?select=prefs&user_id=eq.${uid}`))[0];
+  const about = st && st.prefs && st.prefs.about;
+  if (about) L.push("QUIÉN ES (lo escribió él/ella):", String(about).slice(0, 1500), "");
+  L.push("ÁREAS (puntaje 0-10 · meta):");
+  areas.forEach(a => L.push(`- ${a.key} (${AREAS[a.key] || a.key}): ${a.score}/10${a.goal ? " · " + a.goal : ""}${a.note ? " · nota: " + a.note : ""}`));
+  L.push("", "HÁBITOS últimos 7 días (paseo, bloque, formacion, ejercicio):");
+  days.forEach(d => L.push(`- ${d.day}: ${Object.keys(d.habits || {}).filter(k => d.habits[k]).join(", ") || "ninguno"}${d.kind === "distinto" ? " · día distinto" + (d.note ? ": " + d.note : "") : ""}`));
+  L.push("", "TAREAS (id · fecha · estado):");
+  tasks.forEach(x => {
+    const p = parts(new Date(x.starts_at));
+    L.push(`- ${x.id} · ${ymd(p)}${x.all_day ? "" : " " + pad(p.h) + ":" + pad(p.mi)} · ${x.done ? "hecha" : "pendiente"} · urg ${x.urgency} · ${x.title}`);
+  });
+  if (goals.length) { L.push("", "METAS ABIERTAS:"); goals.forEach(g => L.push(`- [${g.kind}] ${g.title}${g.area ? " (" + g.area + ")" : ""}${g.due ? " · para " + g.due : ""}`)); }
+  if (jr.length) { L.push("", "DIARIO (lo más reciente primero):"); jr.forEach(j => L.push(`- ${j.day}: ${j.body.replace(/\s+/g, " ").slice(0, 400)}`)); }
+  return L.join("\n");
+}

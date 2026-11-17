@@ -244,6 +244,15 @@ async function savePrefs(){
   const r=await sb.from("settings").upsert({user_id:UID,prefs:S.prefs,updated_at:new Date().toISOString()},{onConflict:"user_id"});
   if(r.error)throw r.error;
 }
+/* ── avisos al bot y llamadas a Claude (funciones de Netlify) ── */
+async function apiPost(path,body){
+  const {data:{session}}=await sb.auth.getSession();
+  const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+(session&&session.access_token||"")},body:JSON.stringify(body)});
+  let j={};try{j=await r.json()}catch(_){}
+  if(!r.ok)throw{user:j.error||"No se pudo conectar"};
+  return j;
+}
+function notify(kind,id){if(id&&S.tg)apiPost("/api/aviso",{kind,id}).catch(()=>{})}
 /* ── fondo: carrusel con disolución de ruido (WebGL), con respaldo CSS ── */
 const BG=(function(){
   const cv=document.createElement("canvas");cv.id="bgcanvas";cv.setAttribute("aria-hidden","true");
@@ -823,7 +832,7 @@ $("#addForm").addEventListener("submit",async e=>{
   $("#newTask").value="";$("#newTime").value="";
   const r=await sb.from("tasks").insert(row).select("id,title,starts_at,all_day,urgency,done").single();
   if(r.error){$("#newTask").value=title;fail(r.error,"agregar la tarea");return}
-  S.tasks.push(r.data);blip(true);renderTasks();
+  S.tasks.push(r.data);blip(true);renderTasks();notify("task",r.data.id);
 });
 
 /* ═════════ Telegram ═════════ */
@@ -1086,6 +1095,41 @@ $("#areasGrid").addEventListener("click",e=>{
    }});
 });
 
+/* ✦ leer mi semana: Claude propone puntajes y la rueda se mueve */
+let weekProp=null;
+$("#weekBtn").addEventListener("click",async()=>{
+  const b=$("#weekBtn");b.classList.add("busy");b.textContent="✦ Leyendo…";
+  try{
+    const r=await apiPost("/api/ia",{action:"semana"});weekProp=r.areas||[];
+    $("#iaRead").textContent=r.lectura||"";
+    $("#iaList").innerHTML=AREAS.map(a=>{
+      const p=weekProp.find(x=>x.key===a.k);if(!p)return"";
+      const now=S.areas[a.k].score,d=p.score-now;
+      return `<li style="--ac:${cvar(a.c)}"><i></i><b>${a.n}</b><em class="${d?"up":""}">${now} → ${p.score}${d>0?" ↑":d<0?" ↓":""}</em><small>${esc(p.por_que)}</small></li>`;
+    }).join("");
+    $("#iaApply").hidden=!weekProp.some(p=>S.areas[p.key]&&S.areas[p.key].score!==p.score);
+    $("#iaModal").hidden=false;tick();
+  }catch(err){toast(err.user||"No se pudo")}
+  finally{b.classList.remove("busy");b.textContent="✦ Leer mi semana"}
+});
+$("#iaClose").addEventListener("click",()=>{$("#iaModal").hidden=true});
+$("#iaModal").addEventListener("click",e=>{if(e.target.id==="iaModal")$("#iaModal").hidden=true});
+$("#iaApply").addEventListener("click",async()=>{
+  const ch=(weekProp||[]).filter(p=>S.areas[p.key]&&S.areas[p.key].score!==p.score);
+  $("#iaModal").hidden=true;if(!ch.length)return;
+  try{
+    for(const p of ch)await run(sb.from("areas").update({score:p.score,updated_at:new Date().toISOString()}).eq("key",p.key),"mover la rueda");
+    ch.forEach(p=>{S.areas[p.key].score=p.score;const i=AREAS.findIndex(a=>a.k===p.key);if(rings[i])paint(i,true)});
+    setAvg();if(hot<0&&coreNum){coreNum.textContent=avgText();coreLbl.textContent=scored().length?"EQUILIBRIO":"TU RUEDA"}
+    renderReadout();renderAreas();blip(true);toast("Rueda actualizada ✦");
+  }catch(_){}
+});
+
+/* ✦ Claude: quién eres, para que te conozca */
+$("#aboutBtn").addEventListener("click",()=>openSheet({title:"Claude en tu RUTA",fields:[
+  {k:"about",label:"Cuéntale quién eres y qué estás buscando (lo usa para el diario, la semana y el bot)",type:"textarea",value:S.prefs.about||""}],
+  onSave:async v=>{const old=S.prefs.about;S.prefs.about=v.about.slice(0,1500);try{await savePrefs()}catch(e){S.prefs.about=old;fail(e,"guardar");throw e}}}));
+
 /* diario */
 function renderJournal(){
   const by={};
@@ -1098,14 +1142,24 @@ function renderJournal(){
       `<button type="button" class="x" aria-label="Borrar entrada">×</button></div>`;
   }).join("")+`</div>`).join(""):'<p class="empty-note">Todavía no hay entradas. Escribe acá, o mándale una nota al bot.</p>';
 }
+let jQ="";
+function setQ(q){jQ=q||"";$("#jq").hidden=!jQ;$("#jqText").textContent=jQ;$("#jText").placeholder=jQ?"Tu respuesta…":"¿Qué pasó hoy?"}
+$("#askBtn").addEventListener("click",async()=>{
+  const b=$("#askBtn");b.classList.add("busy");b.textContent="✦ Pensando…";
+  try{const r=await apiPost("/api/ia",{action:"pregunta",prev:jQ});setQ(r.q);tone(660,990,.03,.25);$("#jText").focus()}
+  catch(err){toast(err.user||"No se pudo")}
+  finally{b.classList.remove("busy");b.textContent=jQ?"✦ Otra pregunta":"✦ Pregúntame"}
+});
+$("#jqX").addEventListener("click",()=>{setQ("");$("#askBtn").textContent="✦ Pregúntame"});
 $("#jForm").addEventListener("submit",async e=>{
   e.preventDefault();
-  const el=$("#jText"),body=el.value.trim();if(!body)return;
-  el.value="";
+  const el=$("#jText"),ans=el.value.trim();if(!ans)return;
+  const body=jQ?"✦ "+jQ+"\n"+ans:ans;
+  el.value="";setQ("");$("#askBtn").textContent="✦ Pregúntame";
   try{
     const d=await run(sb.from("journal").insert({user_id:UID,day:TODAY,body}).select("*").single(),"guardar la entrada");
     S.journal.unshift(d);blip(true);renderJournal();
-  }catch(_){el.value=body}
+  }catch(_){el.value=ans}
 });
 $("#jText").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))$("#jForm").requestSubmit()});
 $("#jList").addEventListener("click",async e=>{
@@ -1297,7 +1351,7 @@ $("#dreams").addEventListener("click",async e=>{
     try{await run(sb.from("goals").update({pinned:g.pinned}).eq("id",g.id),"fijar el sueño")}catch(_){g.pinned=!g.pinned;renderDreams();renderNext()}
   }else if(act==="done"){
     g.done=true;g.done_at=new Date().toISOString();blip(true);toast("Logrado ✨ "+g.title);renderDreams();renderNext();
-    try{await run(sb.from("goals").update({done:true,done_at:g.done_at}).eq("id",g.id),"marcar como logrado")}
+    try{await run(sb.from("goals").update({done:true,done_at:g.done_at}).eq("id",g.id),"marcar como logrado");notify("goal",g.id)}
     catch(_){g.done=false;g.done_at=null;renderDreams();renderNext()}
   }
 });
@@ -1495,7 +1549,7 @@ $("#dayAdd").addEventListener("submit",async e=>{
   try{
     const d=await run(sb.from("tasks").insert({user_id:UID,title,starts_at:when.toISOString(),all_day:!tm,urgency:dayUrg})
       .select("id,title,starts_at,all_day,urgency,done").single(),"agendar");
-    calTasks.push(d);blip(true);renderCal();renderDay();syncToday(d);
+    calTasks.push(d);blip(true);renderCal();renderDay();syncToday(d);notify("task",d.id);
   }catch(_){$("#dayTask").value=title}
 });
 
@@ -1528,7 +1582,7 @@ async function payJob(j){
   if(!(+j.amount>0))return;
   const d=await run(sb.from("money").insert({user_id:UID,kind:"ingreso",amount:j.amount,currency:curOf(j),day:TODAY,
     note:"Pega: "+j.client+" — "+j.project}).select("*").single(),"anotar el ingreso");
-  S.money.unshift(d);toast("Ingreso anotado: "+fmtMoney(j.amount,curOf(j)));
+  S.money.unshift(d);toast("Ingreso anotado: "+fmtMoney(j.amount,curOf(j)));notify("job",j.id);
 }
 function jobSheet(j){
   const isNew=!j,was=j?j.status:null;
