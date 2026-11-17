@@ -796,3 +796,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opa
 .ia-list li em.up{color:var(--fg)}
 .ia-list li small{grid-column:2/4;color:var(--fg-faint);font-size:12px}
 .ia-card .sheet-actions .btn{width:auto}
+
+.code-form{display:flex;gap:8px;margin-top:12px}
+.code-form .inp{flex:1;min-width:0;text-align:center;letter-spacing:.3em;font-variant-numeric:tabular-nums}
+.code-form .btn{width:auto;padding:0 18px}

@@ -131,6 +131,14 @@ $("#loginForm").addEventListener("submit",async e=>{
   if(error){toast(error.message.includes("rate")?"Espera un minuto antes de pedir otro link.":"No se pudo enviar el link.");return}
   $("#loginForm").hidden=true;$("#sent").hidden=false;
 });
+$("#codeForm").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const email=$("#email").value.trim(),token=$("#code").value.replace(/\D/g,"");if(!email||token.length<6)return;
+  const btn=$("#codeBtn");btn.disabled=true;btn.textContent="…";
+  const {error}=await sb.auth.verifyOtp({email,token,type:"email"});
+  btn.disabled=false;btn.textContent="Entrar";
+  if(error)toast("Ese código no sirve o ya venció. Pide uno nuevo.");
+});
 
 let started=false;
 async function boot(){

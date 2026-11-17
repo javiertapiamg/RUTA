@@ -6,11 +6,16 @@
 <meta name="theme-color" content="#F3F4F7">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="RUTA">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/img/icon-192.png">
 <title>RUTA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/ruta.css?v=202611171709">
+<link rel="stylesheet" href="css/ruta.css?v=202611171711">
 </head>
 <body>
 
@@ -33,7 +38,11 @@
     </form>
     <div class="sent" id="sent" hidden>
       Listo. Revisa tu correo y abre el link.
-      <small>Ábrelo en este mismo navegador para que quedes dentro.</small>
+      <small>Ábrelo en este mismo navegador. Si usas RUTA como app en el celu, escribe aquí el código del correo:</small>
+      <form id="codeForm" class="code-form">
+        <input class="inp" id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="código" required>
+        <button class="btn" type="submit" id="codeBtn">Entrar</button>
+      </form>
     </div>
   </section>
 </main>
@@ -260,7 +269,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611171709"></script>
-<script src="js/app.js?v=202611171709"></script>
+<script src="js/config.js?v=202611171711"></script>
+<script src="js/app.js?v=202611171711"></script>
 </body>
 </html>
