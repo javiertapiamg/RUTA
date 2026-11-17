@@ -1413,7 +1413,9 @@ function renderCal(){
     else if(it.goals.length)ic=cvar("--c-vinculos");
     else if(it.bills.find(x=>x.st==="soon")||it.tasks.find(t=>!t.done&&t.urgency===2))ic="#F2BC27";
     else if(it.bdays.length)ic="#F08CC0";
-    h+=`<button type="button" class="cal-day${key===TODAY?" today":""}${key===calSel?" sel":""}${daysTo(key)<0?" past":""}${ic?" imp":""}${pulse?" pulse":""}"`+
+    let soft=false;
+    if(!ic&&n){const t=it.tasks.find(x=>!x.done);ic=t?URG[t.urgency].c:cvar("--fg-faint");soft=true}
+    h+=`<button type="button" class="cal-day${key===TODAY?" today":""}${key===calSel?" sel":""}${daysTo(key)<0?" past":""}${ic?" imp":""}${soft?" soft":""}${pulse?" pulse":""}"`+
       (ic?` style="--ic:${ic}"`:"")+` data-k="${key}"`+
       ` aria-label="${d} de ${MESES[calM]}${n?", "+n+(n===1?" cosa":" cosas"):""}"><b>${d}</b><span>${dots.slice(0,4).join("")}</span></button>`;
   }
