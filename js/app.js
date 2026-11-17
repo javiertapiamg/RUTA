@@ -185,6 +185,7 @@ async function loadAll(){
   ]);
   [a,d,t,g,st].forEach(r=>{if(r.error)throw r.error});
   S.prefs=(st.data&&st.data.prefs)||{};
+  sb.auth.getUser().then(({data})=>{const e=data&&data.user&&data.user.email;if(e)$("#logout").textContent="cerrar sesión · "+e}).catch(()=>{});
   S.tg=!!(st.data&&st.data.telegram_chat_id);
   a.data.forEach(r=>{if(S.areas[r.key])S.areas[r.key]={score:r.score||0,goal:r.goal||"",note:r.note||"",photo:r.photo||""}});
   S.days={};d.data.forEach(r=>{S.days[r.day]={habits:r.habits||{},kind:r.kind||"normal",note:r.note||""}});
