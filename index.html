@@ -109,6 +109,7 @@
     <button type="button" id="theme">modo oscuro</button>
     <button type="button" id="bgBtn">poner foto de fondo</button>
     <button type="button" id="bgOff" hidden>quitar fondo</button>
+    <button type="button" id="tgBtn">conectar Telegram</button>
     <button type="button" id="logout">cerrar sesión</button>
   </p>
   <input type="file" id="filePick" accept="image/*" hidden>
@@ -124,6 +125,17 @@
     <button type="button" data-v="capital"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 19.2V10M10 19.2V4.8M16 19.2v-6.6M21.4 19.2H2.6"/></svg>Capital</button>
   </div>
 </nav>
+
+<div class="modal" id="tgModal" hidden>
+  <section class="glass modal-card" role="dialog" aria-modal="true" aria-labelledby="tgTitle">
+    <h2 id="tgTitle">Conectar Telegram</h2>
+    <p>Abre tu bot de RUTA en Telegram y mándale este código:</p>
+    <div class="code" id="tgCode">——————</div>
+    <button type="button" class="btn" id="tgCopy">Copiar código</button>
+    <p class="wait" id="tgWait">Esperando a que se lo mandes… vence en 15 minutos.</p>
+    <button type="button" class="link" id="tgClose">Cerrar</button>
+  </section>
+</div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 

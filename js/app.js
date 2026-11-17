@@ -176,10 +176,11 @@ async function loadAll(){
     sb.from("days").select("day,habits,kind,note").gte("day",since),
     sb.from("tasks").select("id,title,starts_at,all_day,urgency,done").or('done.eq.false,starts_at.gte."'+T0.toISOString()+'"'),
     sb.from("goals").select("id,title,kind,area,due,pinned,done,done_at,photo"),
-    sb.from("settings").select("prefs").maybeSingle()
+    sb.from("settings").select("prefs,telegram_chat_id").maybeSingle()
   ]);
   [a,d,t,g,st].forEach(r=>{if(r.error)throw r.error});
   S.prefs=(st.data&&st.data.prefs)||{};
+  S.tg=!!(st.data&&st.data.telegram_chat_id);
   a.data.forEach(r=>{S.areas[r.key]={score:r.score||0,goal:r.goal||"",note:r.note||""}});
   S.days={};d.data.forEach(r=>{S.days[r.day]={habits:r.habits||{},kind:r.kind||"normal",note:r.note||""}});
   S.tasks=t.data;
@@ -681,6 +682,40 @@ $("#addForm").addEventListener("submit",async e=>{
   S.tasks.push(r.data);blip(true);renderTasks();
 });
 
+/* ═════════ Telegram ═════════ */
+let tgPoll=null;
+function renderTg(){
+  const b=$("#tgBtn");
+  b.textContent=S.tg?"Telegram conectado ✓":"conectar Telegram";
+  b.classList.toggle("on",!!S.tg);
+}
+function closeTg(){$("#tgModal").hidden=true;clearInterval(tgPoll);tgPoll=null}
+$("#tgBtn").addEventListener("click",async()=>{
+  if(S.tg){toast("Ya está conectado. Escríbele /ayuda al bot.");return}
+  const n=new Uint32Array(1);crypto.getRandomValues(n);
+  const code=String(100000+n[0]%900000);
+  S.prefs.tg_code=code;S.prefs.tg_code_exp=Date.now()+15*60*1000;
+  try{await savePrefs()}catch(e){fail(e,"crear el código");return}
+  $("#tgCode").textContent=code;$("#tgModal").hidden=false;tick();
+  const t0=Date.now();
+  clearInterval(tgPoll);
+  tgPoll=setInterval(async()=>{
+    if(Date.now()-t0>15*60*1000){$("#tgWait").textContent="El código venció. Cierra y pide otro.";clearInterval(tgPoll);return}
+    const r=await sb.from("settings").select("telegram_chat_id,prefs").maybeSingle();
+    if(r.data&&r.data.telegram_chat_id){
+      S.tg=true;S.prefs=r.data.prefs||{};
+      closeTg();renderTg();blip(true);toast("Telegram conectado ✨");
+    }
+  },3500);
+});
+$("#tgCopy").addEventListener("click",async()=>{
+  const c=$("#tgCode").textContent;
+  try{await navigator.clipboard.writeText(c);toast("Código copiado")}
+  catch(_){const r=document.createRange();r.selectNodeContents($("#tgCode"));const sel=getSelection();sel.removeAllRanges();sel.addRange(r)}
+});
+$("#tgClose").addEventListener("click",closeTg);
+$("#tgModal").addEventListener("click",e=>{if(e.target.id==="tgModal")closeTg()});
+
 /* ═════════ navegación ═════════ */
 const VIEWS=["hoy","vida","suenos","agenda","capital"];
 let curView=null,navTok=0;
@@ -729,7 +764,7 @@ $("#theme").addEventListener("click",()=>{
 /* ═════════ todo junto ═════════ */
 function renderAll(){
   buildWheel();buildLabels();buildSparks();measure();setAvg();setHot(-1);
-  renderHabits();renderBars();renderUrgs();renderTasks();renderNext();applyBg();
+  renderHabits();renderBars();renderUrgs();renderTasks();renderNext();applyBg();renderTg();
   if(!looping&&!reduce){looping=true;requestAnimationFrame(loop)}
 }
 

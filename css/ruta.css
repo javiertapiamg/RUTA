@@ -513,3 +513,18 @@ body.has-photo .blob{opacity:.22}
   --glass:rgba(255,255,255,.7);--glass-2:rgba(255,255,255,.46);--fg-faint:#757D90;--fg-dim:#4B5263}
 :root[data-theme="dark"] body.has-photo{
   --glass:rgba(16,18,27,.62);--glass-2:rgba(16,18,27,.44);--fg-faint:#9AA2B6;--fg-dim:#C0C6D6;--chip:rgba(255,255,255,.1)}
+
+/* ventana: conectar Telegram */
+.modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;
+  padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));
+  background:rgba(14,16,23,.28);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:fadeIn .3s ease both}
+@keyframes fadeIn{from{opacity:0}}
+.modal-card{width:100%;max-width:380px;padding:28px 24px 22px;text-align:center;animation:rise .5s cubic-bezier(.16,.84,.3,1) both}
+.modal-card h2{margin:0 0 8px;font-size:19px;font-weight:600;letter-spacing:-.02em}
+.modal-card p{margin:0 0 16px;color:var(--fg-dim);font-size:13.5px;text-wrap:balance}
+.modal-card .code{font-size:42px;font-weight:200;letter-spacing:.18em;font-variant-numeric:tabular-nums;
+  margin:4px 0 18px;padding-left:.18em;user-select:all;-webkit-user-select:all}
+.modal-card .btn{width:100%}
+.modal-card .wait{margin:14px 0 6px;font-size:12px;color:var(--fg-faint)}
+.modal-card .link{background:none;border:0;font:inherit;font-size:13px;font-weight:600;color:var(--fg-dim);cursor:pointer;padding:8px}
+#tgBtn.on{color:var(--c-oficio)}
