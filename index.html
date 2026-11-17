@@ -166,9 +166,9 @@
   <section class="view" id="v-capital" hidden>
     <div class="tiles rise d1" id="tiles"></div>
     <section class="glass card rise d2">
-      <div class="card-head"><h2>Ingresos por mes</h2><div class="chips" id="curChips"></div></div>
+      <div class="card-head"><h2>Ingresos y gastos</h2><div class="chips" id="curChips"></div></div>
       <p class="chart-read" id="incRead">—</p>
-      <svg id="incChart" viewBox="0 0 600 210" role="img" aria-label="Ingresos de los últimos seis meses"></svg>
+      <svg id="incChart" viewBox="0 0 600 230" role="img" aria-label="Ingresos y gastos de los últimos seis meses"></svg>
     </section>
     <section class="glass card rise d3">
       <div class="card-head"><h2>Movimientos</h2><button type="button" class="mini" id="addMoney">+ Movimiento</button></div>
@@ -187,8 +187,7 @@
 
   <p class="foot">
     <button type="button" id="theme">modo oscuro</button>
-    <button type="button" id="bgBtn">poner foto de fondo</button>
-    <button type="button" id="bgOff" hidden>quitar fondo</button>
+    <button type="button" id="bgBtn">fotos de fondo</button>
     <button type="button" id="tgBtn">conectar Telegram</button>
     <button type="button" id="logout">cerrar sesión</button>
   </p>
@@ -214,6 +213,19 @@
     <button type="button" class="btn" id="tgCopy">Copiar código</button>
     <p class="wait" id="tgWait">Esperando a que se lo mandes… vence en 15 minutos.</p>
     <button type="button" class="link" id="tgClose">Cerrar</button>
+  </section>
+</div>
+
+<div class="modal" id="bgModal" hidden>
+  <section class="glass modal-card sheet" role="dialog" aria-modal="true" aria-labelledby="bgTitle">
+    <h2 id="bgTitle">Fotos de fondo</h2>
+    <p class="sheet-note">Van rotando cada 30 segundos y cambian con una transición de grano.</p>
+    <div class="bg-grid" id="bgGrid"></div>
+    <div class="sheet-actions">
+      <button type="button" class="mini" id="bgAdd">+ Agregar fotos</button>
+      <span class="sp"></span>
+      <button type="button" class="btn" id="bgDone">Listo</button>
+    </div>
   </section>
 </div>
 

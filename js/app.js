@@ -94,7 +94,11 @@ function toast(msg){
   const el=$("#toast");el.textContent=msg;el.classList.add("show");
   clearTimeout(toastT);toastT=setTimeout(()=>el.classList.remove("show"),2600);
 }
-function fail(e,what){console.error(what,e);toast("No se pudo "+what+". Revisa tu conexión.")}
+function fail(e,what){
+  console.error(what,e);
+  const d=e&&(e.message||e.details)||"";
+  toast("No se pudo "+what+(d&&!/fetch|network/i.test(d)?": "+String(d).slice(0,90):". Revisa tu conexión."));
+}
 
 /* ═════════ sonido ═════════ */
 let actx=null;
@@ -151,6 +155,7 @@ async function start(session){
   $("#app").classList.remove("loading");
   renderAll();
   route();
+  setTimeout(()=>document.body.classList.add("booted"),1600);
 }
 $("#logout").addEventListener("click",()=>sb.auth.signOut());
 
@@ -228,10 +233,10 @@ function dropPhoto(path){
   try{localStorage.removeItem("ruta-url:"+path)}catch(_){}
   sb.storage.from(BUCKET).remove([path]).then(()=>{},()=>{});
 }
-function pickFile(){
+function pickFile(multi){
   return new Promise(res=>{
-    const inp=$("#filePick");inp.value="";
-    inp.onchange=()=>res(inp.files&&inp.files[0]||null);
+    const inp=$("#filePick");inp.value="";inp.multiple=!!multi;
+    inp.onchange=()=>res(multi?Array.prototype.slice.call(inp.files||[]):(inp.files&&inp.files[0]||null));
     inp.click();
   });
 }
@@ -239,31 +244,155 @@ async function savePrefs(){
   const r=await sb.from("settings").upsert({user_id:UID,prefs:S.prefs,updated_at:new Date().toISOString()},{onConflict:"user_id"});
   if(r.error)throw r.error;
 }
-async function applyBg(){
-  const el=$("#bgphoto"),has=!!S.prefs.bg;
-  $("#bgOff").hidden=!has;
-  $("#bgBtn").textContent=has?"cambiar foto de fondo":"poner foto de fondo";
-  if(!has){el.classList.remove("on");document.body.classList.remove("has-photo");return}
-  const url=await photoUrl(S.prefs.bg);
-  if(!url)return;
-  const im=new Image();
-  im.onload=()=>{el.style.backgroundImage='url("'+url+'")';el.classList.add("on");document.body.classList.add("has-photo")};
-  im.src=url;
+/* ── fondo: carrusel con disolución de ruido (WebGL), con respaldo CSS ── */
+const BG=(function(){
+  const cv=document.createElement("canvas");cv.id="bgcanvas";cv.setAttribute("aria-hidden","true");
+  document.body.insertBefore(cv,document.body.firstChild);
+  let gl=null;
+  try{gl=cv.getContext("webgl",{antialias:false,premultipliedAlpha:false,preserveDrawingBuffer:false})}catch(_){gl=null}
+  const VS="attribute vec2 a;varying vec2 v;void main(){v=a*.5+.5;gl_Position=vec4(a,0.,1.);}";
+  const FS=`precision mediump float;
+uniform sampler2D t0,t1;uniform vec2 r0,r1,res;uniform float p,time,h0,h1,kb;varying vec2 v;
+float hs(vec2 x){return fract(sin(dot(x,vec2(127.1,311.7)))*43758.5453);}
+float ns(vec2 x){vec2 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);
+  return mix(mix(hs(i),hs(i+vec2(1.,0.)),f.x),mix(hs(i+vec2(0.,1.)),hs(i+1.),f.x),f.y);}
+float fbm(vec2 x){float s=0.,a=.5;for(int i=0;i<5;i++){s+=a*ns(x);x*=2.03;a*=.5;}return s;}
+vec2 cover(vec2 uv,vec2 im){float ra=res.x/res.y,ia=im.x/im.y;
+  vec2 sc=ra>ia?vec2(1.,ia/ra):vec2(ra/ia,1.);return (uv-.5)*sc+.5;}
+vec2 kz(vec2 uv,float k){float z=1.07+.03*sin(time*.021+k)*kb;
+  vec2 d=vec2(sin(time*.017+k),cos(time*.013+k))*.012*kb;return (uv-.5)/z+.5+d;}
+void main(){
+  vec2 uv=vec2(v.x,1.-v.y);
+  vec3 c0=h0>.5?texture2D(t0,kz(cover(uv,r0),0.)).rgb:vec3(.5);
+  vec3 c1=h1>.5?texture2D(t1,kz(cover(uv,r1),2.3)).rgb:c0;
+  vec3 col=c0;
+  if(p>0.&&p<1.){
+    float n=fbm(uv*vec2(res.x/res.y,1.)*2.4+time*.03);
+    float w=.16,m=smoothstep(n-w,n+w,p*(1.+2.*w)-w);
+    float e=1.-abs(m*2.-1.);
+    col=mix(c0,c1,m)+pow(e,3.)*vec3(.62,.56,.86)*.5;
+  }else if(p>=1.)col=c1;
+  col+=(hs(uv*res+fract(time*3.7))-.5)*.075;
+  gl_FragColor=vec4(col,1.);
+}`;
+  let prog=null,U={},tex=[null,null],dims=[[1,1],[1,1]],has=[0,0],p=0,anim=null,running=false,lastDraw=0;
+  let list=[],idx=0,timer=null,useGL=!!gl,cssEl=$("#bgphoto");
+  function sh(type,src){const o=gl.createShader(type);gl.shaderSource(o,src);gl.compileShader(o);
+    if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o}
+  if(useGL){
+    try{
+      prog=gl.createProgram();gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS));gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
+      gl.linkProgram(prog);if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error("link");
+      gl.useProgram(prog);
+      const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+      gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+      const loc=gl.getAttribLocation(prog,"a");gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+      ["t0","t1","r0","r1","res","p","time","h0","h1","kb"].forEach(k=>U[k]=gl.getUniformLocation(prog,k));
+      gl.uniform1i(U.t0,0);gl.uniform1i(U.t1,1);
+      for(let i=0;i<2;i++){
+        tex[i]=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex[i]);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      }
+    }catch(e){console.warn("fondo sin WebGL",e);useGL=false}
+  }
+  function size(){
+    if(!useGL)return;
+    const d=Math.min(1.5,window.devicePixelRatio||1),w=Math.round(innerWidth*d),h=Math.round(innerHeight*d);
+    if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;gl.viewport(0,0,w,h)}
+  }
+  addEventListener("resize",size);
+  function draw(t){
+    if(!running)return;
+    requestAnimationFrame(draw);
+    if(document.hidden)return;
+    if(anim){
+      const k=Math.min(1,(t-anim.t0)/anim.d);p=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+      if(k>=1){
+        const tt=tex[0];tex[0]=tex[1];tex[1]=tt;const dd=dims[0];dims[0]=dims[1];dims[1]=dd;
+        has[0]=1;has[1]=0;p=0;anim=null;
+      }
+    }else if(t-lastDraw<1000/24)return;
+    lastDraw=t;size();
+    gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex[0]);
+    gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,tex[1]);
+    gl.uniform2f(U.r0,dims[0][0],dims[0][1]);gl.uniform2f(U.r1,dims[1][0],dims[1][1]);
+    gl.uniform2f(U.res,cv.width,cv.height);gl.uniform1f(U.p,p);gl.uniform1f(U.time,t/1000);
+    gl.uniform1f(U.h0,has[0]);gl.uniform1f(U.h1,has[1]);gl.uniform1f(U.kb,reduce?0:1);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  }
+  function load(url){
+    return new Promise((res,rej)=>{const im=new Image();im.crossOrigin="anonymous";
+      im.onload=()=>res(im);im.onerror=()=>rej(new Error("foto"));im.src=url});
+  }
+  async function showGL(url,first){
+    const im=await load(url),slot=first?0:1;
+    gl.bindTexture(gl.TEXTURE_2D,tex[slot]);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,im);
+    dims[slot]=[im.naturalWidth,im.naturalHeight];
+    if(first){has[0]=1;p=0;anim=null;cv.classList.add("on");}
+    else{has[1]=1;anim={t0:performance.now(),d:reduce?400:2600}}
+    if(!running){running=true;requestAnimationFrame(draw)}
+  }
+  async function showCSS(url){
+    const im=await load(url).catch(()=>null);if(!im)return;
+    cssEl.classList.remove("on");
+    setTimeout(()=>{cssEl.style.backgroundImage='url("'+url+'")';cssEl.classList.add("on")},cssEl.style.backgroundImage?700:0);
+  }
+  async function show(i,first){
+    const url=await photoUrl(list[i]);if(!url)return;
+    if(useGL){
+      try{await showGL(url,first)}
+      catch(e){console.warn("fondo: uso respaldo",e);useGL=false;cv.classList.remove("on");running=false;await showCSS(url)}
+    }else await showCSS(url);
+  }
+  function set(paths){
+    const key=JSON.stringify(paths);if(key===JSON.stringify(list))return;
+    list=paths.slice();clearInterval(timer);timer=null;
+    document.body.classList.toggle("has-photo",list.length>0);
+    if(!list.length){cv.classList.remove("on");running=false;cssEl.classList.remove("on");return}
+    idx=Math.floor(Date.now()/86400000)%list.length;
+    show(idx,true);
+    if(list.length>1)timer=setInterval(()=>{if(document.hidden)return;idx=(idx+1)%list.length;show(idx,false)},30000);
+  }
+  return{set};
+})();
+function bgPaths(){
+  if(!Array.isArray(S.prefs.bgs))S.prefs.bgs=S.prefs.bg?[S.prefs.bg]:[];
+  return S.prefs.bgs;
 }
-$("#bgBtn").addEventListener("click",async()=>{
-  const f=await pickFile();if(!f)return;
-  const b=$("#bgBtn");b.disabled=true;b.textContent="subiendo…";
+async function applyBg(){
+  const l=bgPaths();
+  $("#bgBtn").textContent=l.length?"fotos de fondo ("+l.length+")":"poner fotos de fondo";
+  BG.set(l);
+}
+function renderBgGrid(){
+  const l=bgPaths(),g=$("#bgGrid");
+  g.innerHTML=l.length?l.map((p,i)=>`<div class="bg-th" data-photo="${esc(p)}"><button type="button" class="x" data-i="${i}" aria-label="Quitar esta foto">×</button></div>`).join("")
+    :'<p class="bg-empty">Todavía no hay fotos. Agrega las que quieras ver detrás de tu RUTA.</p>';
+  hydrate(g);
+}
+$("#bgBtn").addEventListener("click",()=>{renderBgGrid();$("#bgModal").hidden=false;tick()});
+$("#bgDone").addEventListener("click",()=>{$("#bgModal").hidden=true});
+$("#bgModal").addEventListener("click",e=>{if(e.target.id==="bgModal")$("#bgModal").hidden=true});
+$("#bgAdd").addEventListener("click",async()=>{
+  const files=await pickFile(true);if(!files.length)return;
+  const b=$("#bgAdd");b.disabled=true;
   try{
-    const old=S.prefs.bg;
-    S.prefs.bg=await uploadPhoto(f,"fondo",2200);
-    await savePrefs();dropPhoto(old);blip(true);
+    for(let i=0;i<files.length;i++){
+      b.textContent="subiendo "+(i+1)+" de "+files.length+"…";
+      bgPaths().push(await uploadPhoto(files[i],"fondo",2200));
+    }
+    delete S.prefs.bg;await savePrefs();blip(true);
   }catch(e){fail(e,"subir la foto")}
-  b.disabled=false;applyBg();
+  b.disabled=false;b.textContent="+ Agregar fotos";renderBgGrid();applyBg();
 });
-$("#bgOff").addEventListener("click",async()=>{
-  const old=S.prefs.bg;delete S.prefs.bg;
-  try{await savePrefs();dropPhoto(old)}catch(e){S.prefs.bg=old;fail(e,"quitar el fondo")}
-  applyBg();
+$("#bgGrid").addEventListener("click",async e=>{
+  const x=e.target.closest(".x");if(!x)return;
+  const l=bgPaths(),i=+x.dataset.i,old=l[i];
+  l.splice(i,1);delete S.prefs.bg;
+  try{await savePrefs();dropPhoto(old);tone(500,300,.04,.18)}catch(err){l.splice(i,0,old);fail(err,"quitar la foto")}
+  renderBgGrid();applyBg();
 });
 let heroGoal=null;
 const SUNSET="linear-gradient(180deg,#FCDCAC 0%,#F4AC7C 26%,#DA8372 46%,#9D6376 64%,#60476A 80%,#3B3053 100%)";
@@ -331,7 +460,7 @@ function renderNext(){
   const rest=up.filter(g=>g!==hero).slice(0,3);
   $("#nextList").innerHTML=rest.map(g=>{
     const d=daysTo(g.due);
-    return `<li><b>${d}</b><span class="u">${d===1?"día":"días"}</span>`+
+    return `<li data-goal="${g.id}" title="Toca para editar"><b>${d}</b><span class="u">${d===1?"día":"días"}</span>`+
       `<span class="w">${esc(g.title)}<small>${fmtDue(g.due)}</small></span></li>`;
   }).join("");
   const recent=S.goals.filter(g=>g.kind==="macro"&&g.done&&g.done_at&&(Date.now()-new Date(g.done_at))<30*864e5);
@@ -743,13 +872,13 @@ document.querySelectorAll(".nav button").forEach(b=>b.addEventListener("click",(
 addEventListener("hashchange",route);
 
 /* ═════════ parallax ═════════ */
-const ph=$("#ph"),blobs=document.querySelectorAll(".blob"),bgEl=$("#bgphoto");
+const ph=$("#ph"),blobs=document.querySelectorAll(".blob");
 let ticking=false;
 addEventListener("scroll",()=>{
   if(ticking)return;ticking=true;
   requestAnimationFrame(()=>{const y=scrollY;
     ph.style.transform=`translateY(${(y*.1).toFixed(1)}px)`;
-    bgEl.style.translate=`0 ${(-y*.035).toFixed(1)}px`;
+
     blobs.forEach((b,i)=>{b.style.marginTop=(-y*(0.035+i*0.013)).toFixed(1)+"px"});
     ticking=false});
 },{passive:true});
@@ -1178,6 +1307,12 @@ async function reopenGoal(id){
 }
 $("#doneList").addEventListener("click",e=>{const b=e.target.closest('[data-act="reopen"]');if(b)reopenGoal(b.closest("li").dataset.id)});
 
+$("#nextList").addEventListener("click",e=>{
+  const li=e.target.closest("[data-goal]");if(!li)return;
+  const g=S.goals.find(x=>x.id===li.dataset.goal);if(g)goalSheet(g);
+});
+document.querySelector(".next-photo .cap").addEventListener("click",()=>{if(heroGoal)goalSheet(heroGoal)});
+
 /* ═════════ AGENDA ═════════ */
 let calY=NOW.getFullYear(),calM=NOW.getMonth(),calSel=TODAY,calTasks=[],dayUrg=1;
 const ymOf=(y,m)=>y+"-"+pad(m+1);
@@ -1271,7 +1406,15 @@ function renderCal(){
     it.bdays.forEach(()=>dots.push('<i class="pd"></i>'));
     it.tasks.forEach(t=>dots.push(`<i style="background:${t.done?"var(--fg-faint)":URG[t.urgency].c}"></i>`));
     const n=dots.length;
-    h+=`<button type="button" class="cal-day${key===TODAY?" today":""}${key===calSel?" sel":""}${daysTo(key)<0?" past":""}" data-k="${key}"`+
+    let ic=null,pulse=false;
+    const bad=it.bills.find(x=>x.st==="late"||x.st==="hot"),urg=it.tasks.find(t=>!t.done&&t.urgency>=3);
+    if(bad||urg){ic="#E5484D";pulse=true}
+    else if(it.bills.find(x=>x.st==="warm"))ic="#F28A3C";
+    else if(it.goals.length)ic=cvar("--c-vinculos");
+    else if(it.bills.find(x=>x.st==="soon")||it.tasks.find(t=>!t.done&&t.urgency===2))ic="#F2BC27";
+    else if(it.bdays.length)ic="#F08CC0";
+    h+=`<button type="button" class="cal-day${key===TODAY?" today":""}${key===calSel?" sel":""}${daysTo(key)<0?" past":""}${ic?" imp":""}${pulse?" pulse":""}"`+
+      (ic?` style="--ic:${ic}"`:"")+` data-k="${key}"`+
       ` aria-label="${d} de ${MESES[calM]}${n?", "+n+(n===1?" cosa":" cosas"):""}"><b>${d}</b><span>${dots.slice(0,4).join("")}</span></button>`;
   }
   $("#cal").innerHTML=h;
@@ -1343,11 +1486,12 @@ $("#dayAdd").addEventListener("submit",async e=>{
 
 /* ═════════ CAPITAL ═════════ */
 let capCur="CLP";
+const KLAB={ahorro:"Ahorro",ingreso:"Ingreso",gasto:"Gasto"};
 const curOf=m=>m.currency||"CLP";
 function moneySheet(m){
   const isNew=!m;
   openSheet({title:isNew?"Nuevo movimiento":"Movimiento",fields:[
-    {k:"kind",label:"Tipo",type:"select",options:[["ahorro","Ahorro"],["ingreso","Ingreso"]],value:m?m.kind:"ahorro"},
+    {k:"kind",label:"Tipo",type:"select",options:[["ahorro","Ahorro"],["ingreso","Ingreso"],["gasto","Gasto (resta)"]],value:m?m.kind:"ahorro"},
     {k:"amount",label:"Monto",type:"number",value:m?+m.amount:""},
     {k:"currency",label:"Moneda",type:"select",options:[["CLP","Pesos (CLP)"],["USD","Dólares (USD)"]],value:m?curOf(m):"CLP"},
     {k:"day",label:"Fecha",type:"date",value:m?m.day:TODAY},
@@ -1396,24 +1540,35 @@ function jobSheet(j){
 }
 function renderIncChart(){
   const months=[];
-  for(let i=5;i>=0;i--){const d=new Date(NOW.getFullYear(),NOW.getMonth()-i,1);months.push({ym:ymOf(d.getFullYear(),d.getMonth()),m:d.getMonth(),v:0})}
-  S.money.forEach(x=>{if(x.kind!=="ingreso"||curOf(x)!==capCur)return;const mo=months.find(o=>o.ym===String(x.day).slice(0,7));if(mo)mo.v+= +x.amount});
-  const max=Math.max.apply(null,months.map(o=>o.v)),sv=$("#incChart"),read=$("#incRead");
-  const say=o=>{read.innerHTML=`${MESES[o.m][0].toUpperCase()+MESES[o.m].slice(1)}: <b>${fmtMoney(o.v,capCur)}</b>`};
-  if(!max){sv.innerHTML="";sv.style.display="none";read.textContent="Aún no hay ingresos en "+(capCur==="USD"?"dólares":"pesos")+" en estos seis meses.";return}
+  for(let i=5;i>=0;i--){const d=new Date(NOW.getFullYear(),NOW.getMonth()-i,1);months.push({ym:ymOf(d.getFullYear(),d.getMonth()),m:d.getMonth(),inc:0,exp:0})}
+  S.money.forEach(x=>{
+    if(curOf(x)!==capCur||(x.kind!=="ingreso"&&x.kind!=="gasto"))return;
+    const mo=months.find(o=>o.ym===String(x.day).slice(0,7));if(!mo)return;
+    if(x.kind==="ingreso")mo.inc+= +x.amount;else mo.exp+= +x.amount;
+  });
+  const max=Math.max.apply(null,months.map(o=>Math.max(o.inc,o.exp))),sv=$("#incChart"),read=$("#incRead");
+  const say=o=>{read.innerHTML=`${MESES[o.m][0].toUpperCase()+MESES[o.m].slice(1)}: ingresos <b>${fmtMoney(o.inc,capCur)}</b> · gastos <b>${fmtMoney(o.exp,capCur)}</b>`};
+  if(!max){sv.innerHTML="";sv.style.display="none";read.textContent="Aún no hay ingresos ni gastos en "+(capCur==="USD"?"dólares":"pesos")+" en estos seis meses.";return}
   sv.style.display="";
-  const W=600,H=210,L=8,R=8,T=26,B=28,pw=(W-L-R)/6,bw=Math.min(46,pw*.5),ph=H-T-B;
-  const ink=cvar("--fg-faint"),fg=cvar("--fg"),grid=cvar("--edge"),col="#3FA9E8";
-  let h=`<line x1="${L}" y1="${T}" x2="${W-R}" y2="${T}" stroke="${grid}" stroke-width="1"/>`+
+  const W=600,H=230,L=8,R=8,T=48,B=28,pw=(W-L-R)/6,bw=Math.min(26,pw*.27),ph=H-T-B;
+  const ink=cvar("--fg-faint"),fg=cvar("--fg"),grid=cvar("--edge"),ci=cvar("--inc"),ce=cvar("--exp"),ui=cvar("--ui");
+  let h=`<g font-family="${ui}" font-size="12" font-weight="600"><rect x="${L}" y="4" width="10" height="10" rx="3" fill="${ci}"/><text x="${L+16}" y="13" fill="${cvar("--fg-dim")}">Ingresos</text>`+
+    `<rect x="${L+90}" y="4" width="10" height="10" rx="3" fill="${ce}"/><text x="${L+106}" y="13" fill="${cvar("--fg-dim")}">Gastos</text></g>`+
+    `<line x1="${L}" y1="${T}" x2="${W-R}" y2="${T}" stroke="${grid}" stroke-width="1"/>`+
     `<line x1="${L}" y1="${T+ph/2}" x2="${W-R}" y2="${T+ph/2}" stroke="${grid}" stroke-width="1"/>`+
     `<line x1="${L}" y1="${T+ph}" x2="${W-R}" y2="${T+ph}" stroke="${ink}" stroke-width="1" opacity=".5"/>`+
-    `<text x="${W-R}" y="${T-7}" text-anchor="end" font-size="11" fill="${ink}" font-family="${cvar("--ui")}">${shortMoney(max)}</text>`;
+    `<text x="${W-R}" y="${T-7}" text-anchor="end" font-size="11" fill="${ink}" font-family="${ui}">${shortMoney(max)}</text>`;
+  const bar=(x,v,col,op)=>{const bh=Math.max(v?3:0,v/max*ph);if(!bh)return"";const y=T+ph-bh,r=Math.min(4,bh);
+    return `<path fill="${col}" opacity="${op}" d="M${x} ${T+ph}V${y+r}q0 ${-r} ${r} ${-r}h${bw-2*r}q${r} 0 ${r} ${r}V${T+ph}z"/>`};
   months.forEach((o,i)=>{
-    const cx=L+pw*i+pw/2,bh=Math.max(o.v?3:0,o.v/max*ph),y=T+ph-bh,r=Math.min(4,bh),cur=i===5;
-    if(bh)h+=`<path class="bar" data-i="${i}" fill="${col}" opacity="${cur?1:.55}" d="M${cx-bw/2} ${T+ph}V${y+r}q0 ${-r} ${r} ${-r}h${bw-2*r}q${r} 0 ${r} ${r}V${T+ph}z"/>`;
-    if(o.v&&(o.v===max||cur))h+=`<text x="${cx}" y="${y-7}" text-anchor="middle" font-size="12" font-weight="600" fill="${fg}" font-family="${cvar("--ui")}">${shortMoney(o.v)}</text>`;
-    h+=`<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="12" font-weight="${cur?700:500}" fill="${cur?fg:ink}" font-family="${cvar("--ui")}">${MES3[o.m]}</text>`+
-       `<rect class="bar" data-i="${i}" x="${L+pw*i}" y="${T}" width="${pw}" height="${ph+B}" fill="transparent"/>`;
+    const cx=L+pw*i+pw/2,cur=i===5,op=cur?1:.6;
+    h+=bar(cx-bw-1,o.inc,ci,op)+bar(cx+1,o.exp,ce,op);
+    if(cur){
+      if(o.inc)h+=`<text x="${cx-bw/2-1}" y="${T+ph-o.inc/max*ph-7}" text-anchor="middle" font-size="11.5" font-weight="600" fill="${fg}" font-family="${ui}">${shortMoney(o.inc)}</text>`;
+      if(o.exp)h+=`<text x="${cx+bw/2+1}" y="${T+ph-o.exp/max*ph-7}" text-anchor="middle" font-size="11.5" font-weight="600" fill="${fg}" font-family="${ui}">${shortMoney(o.exp)}</text>`;
+    }
+    h+=`<text x="${cx}" y="${H-8}" text-anchor="middle" font-size="12" font-weight="${cur?700:500}" fill="${cur?fg:ink}" font-family="${ui}">${MES3[o.m]}</text>`+
+       `<rect data-i="${i}" x="${L+pw*i}" y="${T}" width="${pw}" height="${ph+B}" fill="transparent" style="cursor:pointer"/>`;
   });
   sv.innerHTML=h;say(months[5]);
   sv.onpointerover=sv.onclick=e=>{const b=e.target.closest("[data-i]");if(b)say(months[+b.dataset.i])};
@@ -1426,18 +1581,21 @@ function renderCapital(){
   const hasUSD=S.money.some(m=>curOf(m)==="USD");
   const doneN=S.goals.filter(g=>g.kind==="macro"&&g.done).length;
   const tile=(lab,big,sub)=>`<section class="glass tile"><small>${lab}</small><b>${big}</b>${sub?`<em>${sub}</em>`:""}</section>`;
+  const disp=c=>sum("ahorro",c)-sum("gasto",c);
+  const sgn=(n,c)=>(n<0?"−":"")+fmtMoney(Math.abs(n),c);
   $("#tiles").innerHTML=
-    tile("Ahorro acumulado",fmtMoney(sum("ahorro","CLP"),"CLP"),hasUSD?fmtMoney(sum("ahorro","USD"),"USD"):"")+
+    tile("Disponible",sgn(disp("CLP"),"CLP"),(hasUSD?sgn(disp("USD"),"USD")+" · ":"")+"ahorro menos gastos")+
     tile("Ingresos de "+MESES[NOW.getMonth()],fmtMoney(sum("ingreso","CLP",true),"CLP"),hasUSD?fmtMoney(sum("ingreso","USD",true),"USD"):"")+
+    tile("Gastos de "+MESES[NOW.getMonth()],fmtMoney(sum("gasto","CLP",true),"CLP"),hasUSD?fmtMoney(sum("gasto","USD",true),"USD"):"")+
     tile("Metas logradas",String(doneN),doneN===1?"sueño cumplido":"sueños cumplidos");
   if(!hasUSD)capCur="CLP";
   $("#curChips").innerHTML=hasUSD?["CLP","USD"].map(c=>`<button type="button" class="chipf" data-c="${c}" aria-pressed="${capCur===c}">${c}</button>`).join(""):"";
   renderIncChart();
   $("#moves").innerHTML=S.money.length?S.money.slice(0,25).map(m=>
-    `<li class="move" data-id="${m.id}"><span class="pill ${m.kind}">${m.kind==="ahorro"?"Ahorro":"Ingreso"}</span>`+
-    `<span class="t"><b>${esc(m.note||(m.kind==="ahorro"?"Ahorro":"Ingreso"))}</b><small>${dayLabel(m.day)}</small></span>`+
-    `<span class="amt">${fmtMoney(m.amount,curOf(m))}</span></li>`).join("")
-    :'<li class="empty-note">Anota acá lo que ahorras y lo que te entra. Sin gastos del día a día.</li>';
+    `<li class="move" data-id="${m.id}"><span class="pill ${m.kind}">${KLAB[m.kind]||m.kind}</span>`+
+    `<span class="t"><b>${esc(m.note||KLAB[m.kind]||"")}</b><small>${dayLabel(m.day)}</small></span>`+
+    `<span class="amt${m.kind==="gasto"?" neg":""}">${m.kind==="gasto"?"−":""}${fmtMoney(m.amount,curOf(m))}</span></li>`).join("")
+    :'<li class="empty-note">Anota lo que ahorras, lo que te entra y lo que gastas. Los gastos restan del disponible.</li>';
   $("#jobs").innerHTML=S.jobs.length?S.jobs.slice(0,40).map(j=>{
     const si=Math.max(0,JST.indexOf(j.status));
     return `<li class="job" data-id="${j.id}"><span class="t"><b>${esc(j.project)}</b><small>${esc(j.client)} · ${dayLabel(j.day)}</small></span>`+

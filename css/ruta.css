@@ -720,3 +720,57 @@ button.pill{border:0;font-family:inherit;cursor:pointer}
 }
 .dreams{align-items:start}
 @media (min-width:1040px){#v-capital > :nth-child(3){grid-row:span 2}}
+
+/* ═════════ ajustes 17-nov ═════════ */
+/* modo oscuro: más contraste */
+:root{--inc:#2F95DC;--exp:#DC6452}
+:root[data-theme="dark"]{
+  --fg-dim:#C3C9D7;--fg-faint:#98A0B4;
+  --glass:rgba(24,27,40,.58);--glass-2:rgba(24,27,40,.4);
+  --inc:#3593D6;--exp:#DA6352}
+:root[data-theme="dark"] .inp::placeholder{color:#8A92A6}
+
+/* listas desplegables: flecha con aire */
+select.inp{-webkit-appearance:none;appearance:none;padding-right:44px;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238C93A4' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 16px center;background-size:14px}
+select.inp option{color:#14161C;background:#fff}
+
+/* sin segunda animación al volver a una pestaña */
+body.booted .views .rise{animation:none}
+body.booted .views .view.enter > *{animation:vIn .6s cubic-bezier(.16,.84,.3,1) both}
+body.booted .views .view.leave > *{animation:vOut .2s cubic-bezier(.4,0,.9,.5) both}
+
+/* fondo animado */
+#bgcanvas{position:fixed;inset:0;width:100vw;height:100vh;z-index:-4;opacity:0;transition:opacity 1.6s ease;pointer-events:none}
+#bgcanvas.on{opacity:1}
+.bgveil{z-index:-3}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.22;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.sheet-note{margin:-6px 0 14px;color:var(--fg-dim);font-size:13px}
+.bg-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.bg-th{position:relative;aspect-ratio:3/4;border-radius:12px;background:var(--chip) center/cover;border:1px solid var(--edge)}
+.bg-th .x{position:absolute;top:4px;right:4px;background:rgba(20,22,30,.6);color:#fff;opacity:1;width:26px;height:26px;border-radius:50%;
+  display:grid;place-items:center;padding:0;font-size:16px}
+.bg-empty{grid-column:1/-1;color:var(--fg-faint);font-size:13px;padding:18px 0;text-align:center}
+
+/* calendario: días importantes */
+.cal-day.imp{box-shadow:inset 0 0 0 1.5px var(--ic),inset 0 0 18px -4px var(--ic);
+  background:color-mix(in srgb,var(--ic) 9%,transparent)}
+.cal-day.imp.pulse{animation:calPulse 1.9s ease-in-out infinite}
+@keyframes calPulse{0%,100%{box-shadow:inset 0 0 0 1.5px var(--ic),inset 0 0 14px -4px var(--ic)}
+  50%{box-shadow:inset 0 0 0 2px var(--ic),inset 0 0 26px 0 var(--ic),0 0 16px -4px var(--ic)}}
+.cal-day.sel.imp{background:var(--fg)}
+
+/* hitos editables desde Hoy */
+#nextList li,.next-photo .cap{cursor:pointer}
+@media (hover:hover){#nextList li:hover .w{text-decoration:underline;text-underline-offset:3px}}
+
+/* capital: gastos */
+.pill.gasto{background:#FFDCD6;color:#9A2618}
+.amt.neg{color:var(--exp)}
+.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:1040px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--fg-dim);font-weight:600;margin:-4px 0 8px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:block}
