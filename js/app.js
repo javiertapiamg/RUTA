@@ -252,7 +252,7 @@ const BG=(function(){
   try{gl=cv.getContext("webgl",{antialias:false,premultipliedAlpha:false,preserveDrawingBuffer:false})}catch(_){gl=null}
   const VS="attribute vec2 a;varying vec2 v;void main(){v=a*.5+.5;gl_Position=vec4(a,0.,1.);}";
   const FS=`precision mediump float;
-uniform sampler2D t0,t1;uniform vec2 r0,r1,res;uniform float p,time,h0,h1,kb;varying vec2 v;
+uniform sampler2D t0,t1;uniform vec2 r0,r1,res;uniform float p,time,h0,h1,kb,k0,k1;varying vec2 v;
 float hs(vec2 x){return fract(sin(dot(x,vec2(127.1,311.7)))*43758.5453);}
 float ns(vec2 x){vec2 i=floor(x),f=fract(x);f=f*f*(3.-2.*f);
   return mix(mix(hs(i),hs(i+vec2(1.,0.)),f.x),mix(hs(i+vec2(0.,1.)),hs(i+1.),f.x),f.y);}
@@ -261,21 +261,32 @@ vec2 cover(vec2 uv,vec2 im){float ra=res.x/res.y,ia=im.x/im.y;
   vec2 sc=ra>ia?vec2(1.,ia/ra):vec2(ra/ia,1.);return (uv-.5)*sc+.5;}
 vec2 kz(vec2 uv,float k){float z=1.07+.03*sin(time*.021+k)*kb;
   vec2 d=vec2(sin(time*.017+k),cos(time*.013+k))*.012*kb;return (uv-.5)/z+.5+d;}
+vec3 soft(sampler2D t,vec2 c,float r){
+  vec3 s=texture2D(t,c).rgb*.2;
+  s+=texture2D(t,c+vec2(r,0.)).rgb*.1;s+=texture2D(t,c-vec2(r,0.)).rgb*.1;
+  s+=texture2D(t,c+vec2(0.,r)).rgb*.1;s+=texture2D(t,c-vec2(0.,r)).rgb*.1;
+  s+=texture2D(t,c+vec2(r,r)*.71).rgb*.1;s+=texture2D(t,c-vec2(r,r)*.71).rgb*.1;
+  s+=texture2D(t,c+vec2(r,-r)*.71).rgb*.1;s+=texture2D(t,c-vec2(r,-r)*.71).rgb*.1;
+  return s;}
 void main(){
   vec2 uv=vec2(v.x,1.-v.y);
-  vec3 c0=h0>.5?texture2D(t0,kz(cover(uv,r0),0.)).rgb:vec3(.5);
-  vec3 c1=h1>.5?texture2D(t1,kz(cover(uv,r1),2.3)).rgb:c0;
-  vec3 col=c0;
+  vec2 q0=kz(cover(uv,r0),k0),q1=kz(cover(uv,r1),k1);
+  vec3 col=h0>.5?texture2D(t0,q0).rgb:vec3(.5);
   if(p>0.&&p<1.){
-    float n=fbm(uv*vec2(res.x/res.y,1.)*2.4+time*.03);
-    float w=.16,m=smoothstep(n-w,n+w,p*(1.+2.*w)-w);
+    float b=sin(p*3.14159);
+    float r=.024*b;
+    vec3 c0=h0>.5?(soft(t0,q0,r)+soft(t0,q0,r*.5))*.5:vec3(.5);
+    vec3 c1=h1>.5?(soft(t1,q1,r)+soft(t1,q1,r*.5))*.5:c0;
+    float n=fbm(uv*vec2(res.x/res.y,1.)*2.+time*.03);
+    float nn=clamp((n-.3)/.4,0.,1.),W=.6;
+    float m=smoothstep(0.,1.,(p*(1.+W)-nn)/W);
     float e=1.-abs(m*2.-1.);
-    col=mix(c0,c1,m)+pow(e,3.)*vec3(.62,.56,.86)*.5;
-  }else if(p>=1.)col=c1;
+    col=mix(c0,c1,m)+pow(e,1.5)*vec3(.62,.56,.86)*.22*b;
+  }
   col+=(hs(uv*res+fract(time*3.7))-.5)*.075;
   gl_FragColor=vec4(col,1.);
 }`;
-  let prog=null,U={},tex=[null,null],dims=[[1,1],[1,1]],has=[0,0],p=0,anim=null,running=false,lastDraw=0;
+  let prog=null,U={},tex=[null,null],dims=[[1,1],[1,1]],ks=[0,2.3],has=[0,0],p=0,anim=null,running=false,lastDraw=0;
   let list=[],idx=0,timer=null,useGL=!!gl,cssEl=$("#bgphoto");
   function sh(type,src){const o=gl.createShader(type);gl.shaderSource(o,src);gl.compileShader(o);
     if(!gl.getShaderParameter(o,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(o));return o}
@@ -287,7 +298,7 @@ void main(){
       const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
       gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
       const loc=gl.getAttribLocation(prog,"a");gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
-      ["t0","t1","r0","r1","res","p","time","h0","h1","kb"].forEach(k=>U[k]=gl.getUniformLocation(prog,k));
+      ["t0","t1","r0","r1","res","p","time","h0","h1","kb","k0","k1"].forEach(k=>U[k]=gl.getUniformLocation(prog,k));
       gl.uniform1i(U.t0,0);gl.uniform1i(U.t1,1);
       for(let i=0;i<2;i++){
         tex[i]=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex[i]);
@@ -307,9 +318,9 @@ void main(){
     requestAnimationFrame(draw);
     if(document.hidden)return;
     if(anim){
-      const k=Math.min(1,(t-anim.t0)/anim.d);p=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+      const k=Math.min(1,(t-anim.t0)/anim.d);p=k*k*(3-2*k)*.35+k*.65;
       if(k>=1){
-        const tt=tex[0];tex[0]=tex[1];tex[1]=tt;const dd=dims[0];dims[0]=dims[1];dims[1]=dd;
+        const tt=tex[0];tex[0]=tex[1];tex[1]=tt;const dd=dims[0];dims[0]=dims[1];dims[1]=dd;const kk=ks[0];ks[0]=ks[1];ks[1]=kk;
         has[0]=1;has[1]=0;p=0;anim=null;
       }
     }else if(t-lastDraw<1000/24)return;
@@ -319,6 +330,7 @@ void main(){
     gl.uniform2f(U.r0,dims[0][0],dims[0][1]);gl.uniform2f(U.r1,dims[1][0],dims[1][1]);
     gl.uniform2f(U.res,cv.width,cv.height);gl.uniform1f(U.p,p);gl.uniform1f(U.time,t/1000);
     gl.uniform1f(U.h0,has[0]);gl.uniform1f(U.h1,has[1]);gl.uniform1f(U.kb,reduce?0:1);
+    gl.uniform1f(U.k0,ks[0]);gl.uniform1f(U.k1,ks[1]);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
   }
   function load(url){
@@ -326,12 +338,13 @@ void main(){
       im.onload=()=>res(im);im.onerror=()=>rej(new Error("foto"));im.src=url});
   }
   async function showGL(url,first){
+    if(anim&&!first)return;
     const im=await load(url),slot=first?0:1;
     gl.bindTexture(gl.TEXTURE_2D,tex[slot]);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,im);
     dims[slot]=[im.naturalWidth,im.naturalHeight];
     if(first){has[0]=1;p=0;anim=null;cv.classList.add("on");}
-    else{has[1]=1;anim={t0:performance.now(),d:reduce?400:2600}}
+    else{has[1]=1;anim={t0:performance.now(),d:reduce?400:3600}}
     if(!running){running=true;requestAnimationFrame(draw)}
   }
   async function showCSS(url){
@@ -353,7 +366,7 @@ void main(){
     if(!list.length){cv.classList.remove("on");running=false;cssEl.classList.remove("on");return}
     idx=Math.floor(Date.now()/86400000)%list.length;
     show(idx,true);
-    if(list.length>1)timer=setInterval(()=>{if(document.hidden)return;idx=(idx+1)%list.length;show(idx,false)},30000);
+    if(list.length>1)timer=setInterval(()=>{if(document.hidden)return;idx=(idx+1)%list.length;show(idx,false)},18000);
   }
   return{set};
 })();
