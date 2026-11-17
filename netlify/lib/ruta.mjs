@@ -121,12 +121,13 @@ export async function daySummary(uid) {
   const t = today(), tm = addDays(t, 1);
   const start = localToUtc(t.y, t.m, t.d).toISOString();
   const end = localToUtc(tm.y, tm.m, tm.d).toISOString();
-  const [tasks, days, goals] = await Promise.all([
+  const [tasks, days, goals, sets] = await Promise.all([
     db(`tasks?select=title,starts_at,all_day,urgency,done&user_id=eq.${uid}` +
        `&starts_at=lt.${q(end)}&or=${q(`(done.eq.false,starts_at.gte."${start}")`)}` +
        `&order=done.asc,urgency.desc,starts_at.asc&limit=20`),
     db(`days?select=habits,kind&user_id=eq.${uid}&day=eq.${ymd(t)}`),
-    db(`goals?select=title,due&user_id=eq.${uid}&done=is.false&due=gte.${ymd(t)}&order=due.asc&limit=1`)
+    db(`goals?select=title,due&user_id=eq.${uid}&kind=eq.macro&done=is.false&due=gte.${ymd(t)}&order=due.asc&limit=1`),
+    db(`settings?select=prefs&user_id=eq.${uid}`)
   ]);
   const lines = [];
   if (tasks.length) {
@@ -142,6 +143,15 @@ export async function daySummary(uid) {
   const h = (days[0] && days[0].habits) || {};
   lines.push("", "<b>Hábitos</b>", HABITS.map(x => `${h[x.k] ? "✅" : "○"} ${x.n}`).join("\n"));
   if (days[0] && days[0].kind === "distinto") lines.push("<i>Marcado como día distinto</i>");
+  const prefs = (sets[0] && sets[0].prefs) || {};
+  const ym = `${t.y}-${pad(t.m)}`, paid = (prefs.paid && prefs.paid[ym]) || [];
+  const dim = new Date(Date.UTC(t.y, t.m, 0)).getUTCDate();
+  const due = (prefs.bills || []).filter(b => paid.indexOf(b.id) < 0)
+    .map(b => ({ b, n: Math.min(+b.day || 1, dim) - t.d })).filter(x => x.n <= 3).sort((a, b) => a.n - b.n);
+  if (due.length) {
+    lines.push("", "<b>Fijos del mes</b>");
+    due.forEach(x => lines.push(`💳 ${esc(x.b.name)} — ${x.n < 0 ? `atrasado ${-x.n} ${x.n === -1 ? "día" : "días"}` : x.n === 0 ? "vence hoy" : x.n === 1 ? "vence mañana" : `en ${x.n} días`}`));
+  }
   if (goals[0]) {
     const g = goals[0], gd = g.due.split("-").map(Number);
     const n = Math.round((Date.UTC(gd[0], gd[1] - 1, gd[2]) - Date.UTC(t.y, t.m - 1, t.d)) / 864e5);

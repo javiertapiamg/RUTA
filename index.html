@@ -97,12 +97,92 @@
     </section>
   </section>
 
-  <!-- otras vistas -->
-  <section class="view" id="v-vida" hidden><section class="glass soon rise d1"><b>Vida</b><p>Las 8 áreas en detalle, el diario, recuerdos y personas. Es la siguiente que construyo.</p></section></section>
-  <section class="view" id="v-suenos" hidden><section class="glass soon rise d1"><b>Sueños</b><p>Metas grandes con sus metas chicas colgando, fotos y días restantes.</p></section></section>
-  <section class="view" id="v-agenda" hidden><section class="glass soon rise d1"><b>Agenda</b><p>Tu calendario, con urgencias, y lo que agendes por Telegram.</p></section></section>
-  <section class="view" id="v-capital" hidden><section class="glass soon rise d1"><b>Capital</b><p>Ahorro, ingresos, metas logradas y el historial de pegas.</p></section></section>
+  <!-- VIDA -->
+  <section class="view" id="v-vida" hidden>
+    <section class="glass card areas-card rise d1">
+      <div class="card-head"><h2>Tus áreas</h2><span class="hintline">Toca una para editarla</span></div>
+      <div class="areas-grid" id="areasGrid"></div>
+    </section>
+    <section class="glass card journal-card rise d2">
+      <h2>Diario</h2>
+      <form class="jform" id="jForm">
+        <textarea class="inp" id="jText" rows="2" placeholder="¿Qué pasó hoy?" aria-label="Nueva entrada de diario"></textarea>
+        <button class="btn" type="submit">Guardar</button>
+      </form>
+      <div id="jList"></div>
+    </section>
+    <section class="glass card rise d3">
+      <div class="card-head"><h2>Tu gente</h2><button type="button" class="mini" id="addPerson">+ Persona</button></div>
+      <div class="people" id="people"></div>
+    </section>
+    <section class="glass card rise d4">
+      <div class="card-head"><h2>Recuerdos</h2><button type="button" class="mini" id="addMem">+ Recuerdo</button></div>
+      <div class="chips" id="memFilter"></div>
+      <div class="mems" id="mems"></div>
+    </section>
+  </section>
 
+  <!-- SUEÑOS -->
+  <section class="view" id="v-suenos" hidden>
+    <section class="glass view-head rise d1">
+      <h2 class="vt">Sueños</h2>
+      <button type="button" class="btn sm" id="addGoal">+ Nuevo sueño</button>
+    </section>
+    <div class="dreams" id="dreams"></div>
+    <section class="glass card rise d3" id="doneCard" hidden>
+      <h2>Logrados</h2>
+      <ul class="done-list" id="doneList"></ul>
+    </section>
+  </section>
+
+  <!-- AGENDA -->
+  <section class="view" id="v-agenda" hidden>
+    <section class="glass card cal-card rise d1">
+      <div class="card-head">
+        <button type="button" class="mini" id="calPrev" aria-label="Mes anterior">‹</button>
+        <h2 id="calTitle">—</h2>
+        <button type="button" class="mini" id="calNext" aria-label="Mes siguiente">›</button>
+      </div>
+      <div class="cal-dow" aria-hidden="true"><span>L</span><span>M</span><span>M</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+      <div class="cal" id="cal"></div>
+    </section>
+    <section class="glass card rise d2">
+      <h2 id="dayTitle">—</h2>
+      <ul class="tasks" id="dayList"></ul>
+      <form class="add" id="dayAdd" autocomplete="off">
+        <input class="inp" id="dayTask" type="text" placeholder="Agendar algo este día" maxlength="140" aria-label="Nueva tarea">
+        <input class="inp" id="dayTime" type="time" aria-label="Hora (opcional)">
+        <div class="urgs" id="dayUrgs" role="group" aria-label="Urgencia"></div>
+        <button class="btn" type="submit">Agendar</button>
+      </form>
+    </section>
+    <section class="glass card rise d3">
+      <div class="card-head"><h2>Fijos del mes</h2><button type="button" class="mini" id="addBill">+ Fijo</button></div>
+      <ul class="tasks" id="bills"></ul>
+    </section>
+  </section>
+
+  <!-- CAPITAL -->
+  <section class="view" id="v-capital" hidden>
+    <div class="tiles rise d1" id="tiles"></div>
+    <section class="glass card rise d2">
+      <div class="card-head"><h2>Ingresos por mes</h2><div class="chips" id="curChips"></div></div>
+      <p class="chart-read" id="incRead">—</p>
+      <svg id="incChart" viewBox="0 0 600 210" role="img" aria-label="Ingresos de los últimos seis meses"></svg>
+    </section>
+    <section class="glass card rise d3">
+      <div class="card-head"><h2>Movimientos</h2><button type="button" class="mini" id="addMoney">+ Movimiento</button></div>
+      <ul class="moves" id="moves"></ul>
+    </section>
+    <section class="glass card rise d4">
+      <div class="card-head"><h2>Pegas</h2><button type="button" class="mini" id="addJob">+ Pega</button></div>
+      <ul class="jobs" id="jobs"></ul>
+    </section>
+    <section class="glass card rise d5">
+      <h2>Metas logradas</h2>
+      <ul class="done-list" id="capDone"></ul>
+    </section>
+  </section>
   </div>
 
   <p class="foot">
@@ -135,6 +215,19 @@
     <p class="wait" id="tgWait">Esperando a que se lo mandes… vence en 15 minutos.</p>
     <button type="button" class="link" id="tgClose">Cerrar</button>
   </section>
+</div>
+
+<div class="modal" id="sheet" hidden>
+  <form class="glass modal-card sheet" id="sheetForm" autocomplete="off">
+    <h2 id="sheetTitle">—</h2>
+    <div id="sheetFields"></div>
+    <div class="sheet-actions">
+      <button type="button" class="link danger" id="sheetDel" hidden>Eliminar</button>
+      <span class="sp"></span>
+      <button type="button" class="link" id="sheetCancel">Cancelar</button>
+      <button type="submit" class="btn" id="sheetSave">Guardar</button>
+    </div>
+  </form>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
