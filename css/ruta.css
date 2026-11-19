@@ -800,3 +800,6 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opa
 .code-form{display:flex;gap:8px;margin-top:12px}
 .code-form .inp{flex:1;min-width:0;text-align:center;letter-spacing:.3em;font-variant-numeric:tabular-nums}
 .code-form .btn{width:auto;padding:0 18px}
+
+.linkish{background:none;border:0;color:var(--fg-faint);font:inherit;font-size:12.5px;padding:6px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.linkish:hover{color:var(--fg)}

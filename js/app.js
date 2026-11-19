@@ -124,11 +124,19 @@ function showLogin(){
 }
 $("#loginForm").addEventListener("submit",async e=>{
   e.preventDefault();
-  const email=$("#email").value.trim();if(!email)return;
-  const btn=$("#loginBtn");btn.disabled=true;btn.textContent="Enviando…";
-  const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
-  btn.disabled=false;btn.textContent="Enviarme el link";
-  if(error){toast(error.message.includes("rate")?"Espera un minuto antes de pedir otro link.":"No se pudo enviar el link.");return}
+  const email=$("#email").value.trim(),password=$("#pass").value;if(!email)return;
+  if(!password){$("#pass").focus();toast("Escribe tu clave, o pide un link abajo.");return}
+  const btn=$("#loginBtn");btn.disabled=true;btn.textContent="Entrando…";
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  btn.disabled=false;btn.textContent="Entrar";
+  if(error)toast(/invalid/i.test(error.message)?"Correo o clave no calzan. Si no tienes clave aún, pide un link.":"No se pudo entrar: "+error.message);
+});
+$("#linkBtn").addEventListener("click",async()=>{
+  const email=$("#email").value.trim();if(!email){$("#email").focus();toast("Escribe tu correo primero.");return}
+  const btn=$("#linkBtn");btn.disabled=true;
+  const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname,shouldCreateUser:false}});
+  btn.disabled=false;
+  if(error){toast(/rate|seconds/i.test(error.message)?"Espera un minuto antes de pedir otro link.":"No se pudo enviar el link.");return}
   $("#loginForm").hidden=true;$("#sent").hidden=false;
 });
 $("#codeForm").addEventListener("submit",async e=>{
@@ -193,6 +201,8 @@ async function loadAll(){
   ]);
   [a,d,t,g,st].forEach(r=>{if(r.error)throw r.error});
   S.prefs=(st.data&&st.data.prefs)||{};
+  if(!S.prefs.has_pass){let seen=false;try{seen=sessionStorage.getItem("ruta-passask")}catch(_){}
+    if(!seen){try{sessionStorage.setItem("ruta-passask","1")}catch(_){}setTimeout(()=>{if($("#sheet").hidden)passSheet(true)},1800)}}
   sb.auth.getUser().then(({data})=>{const e=data&&data.user&&data.user.email;if(e)$("#logout").textContent="cerrar sesión · "+e}).catch(()=>{});
   S.tg=!!(st.data&&st.data.telegram_chat_id);
   a.data.forEach(r=>{if(S.areas[r.key])S.areas[r.key]={score:r.score||0,goal:r.goal||"",note:r.note||"",photo:r.photo||""}});
@@ -989,7 +999,7 @@ function openSheet(o){
     else if(f.type==="range")ctl=`<input type="range" min="0" max="10" step="1" id="${id}" value="${+f.value||0}"><output>${+f.value||0}</output>`;
     else ctl=`<input class="inp" type="${f.type||"text"}" id="${id}" value="${esc(f.value==null?"":f.value)}"`+
       (f.ph?` placeholder="${esc(f.ph)}"`:"")+(f.type==="number"?` inputmode="decimal" step="any" min="${f.min==null?0:f.min}"`+(f.max?` max="${f.max}"`:""):"")+
-      (f.type==="text"||!f.type?' maxlength="160"':"")+`>`;
+      (f.type==="text"||!f.type?' maxlength="160"':"")+(f.type==="password"?' autocomplete="new-password" minlength="8"':"")+`>`;
     w.innerHTML=`<span>${esc(f.label)}</span>${ctl}`;
     box.appendChild(w);
   });
@@ -1027,7 +1037,7 @@ $("#sheetForm").addEventListener("submit",async e=>{
       if(f.type==="photo")v[f.k]=el._file?await uploadPhoto(el._file,f.slot||"foto",1600):(f.value||"");
       else if(f.type==="number")v[f.k]=el.value===""?null:+el.value;
       else if(f.type==="range")v[f.k]=+el.value;
-      else v[f.k]=el.value.trim();
+      else v[f.k]=f.type==="password"?el.value:el.value.trim();
     }
     await o.onSave(v);
     blip(true);closeSheet();
@@ -1133,6 +1143,20 @@ $("#iaApply").addEventListener("click",async()=>{
     renderReadout();renderAreas();blip(true);toast("Rueda actualizada ✦");
   }catch(_){}
 });
+
+/* clave: para entrar sin esperar correos */
+function passSheet(first){openSheet({title:first?"Ponle una clave a tu RUTA":"Cambiar clave",fields:[
+  {k:"p1",label:"Clave nueva (mínimo 8 caracteres)",type:"password"},
+  {k:"p2",label:"Repítela",type:"password"}],
+  onSave:async v=>{
+    if(v.p1.length<8){toast("Mínimo 8 caracteres.");throw{code:"quiet"}}
+    if(v.p1!==v.p2){toast("No son iguales.");throw{code:"quiet"}}
+    const {error}=await sb.auth.updateUser({password:v.p1});
+    if(error){toast(/same|different/i.test(error.message)?"Esa ya es tu clave.":/reauth|nonce|recent/i.test(error.message)?"Por seguridad, entra con un link nuevo y cámbiala al tiro.":"No se pudo: "+error.message);throw{code:"quiet"}}
+    S.prefs.has_pass=true;savePrefs().catch(()=>{});
+    toast("Clave lista. Desde ahora entras con correo y clave ✓");
+  }})}
+$("#passBtn").addEventListener("click",()=>passSheet(false));
 
 /* ✦ Claude: quién eres, para que te conozca */
 $("#aboutBtn").addEventListener("click",()=>openSheet({title:"Claude en tu RUTA",fields:[

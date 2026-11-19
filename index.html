@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700&display=swap">
-<link rel="stylesheet" href="css/ruta.css?v=202611171711">
+<link rel="stylesheet" href="css/ruta.css?v=202611191722">
 </head>
 <body>
 
@@ -30,11 +30,13 @@
 <main class="login" id="login" hidden>
   <section class="glass rise d1">
     <h1 class="mark">Ruta</h1>
-    <p>Tu panel de vida. Entra con tu correo y te llega un link.</p>
+    <p>Tu panel de vida. Entra con tu correo y tu clave.</p>
     <form id="loginForm">
-      <input class="inp" id="email" type="email" inputmode="email" autocomplete="email"
+      <input class="inp" id="email" type="email" inputmode="email" autocomplete="username"
              placeholder="tu correo" required>
-      <button class="btn" type="submit" id="loginBtn">Enviarme el link</button>
+      <input class="inp" id="pass" type="password" autocomplete="current-password" placeholder="tu clave">
+      <button class="btn" type="submit" id="loginBtn">Entrar</button>
+      <button class="linkish" type="button" id="linkBtn">¿Sin clave o se te olvidó? Envíame un link</button>
     </form>
     <div class="sent" id="sent" hidden>
       Listo. Revisa tu correo y abre el link.
@@ -200,6 +202,7 @@
     <button type="button" id="bgBtn">fotos de fondo</button>
     <button type="button" id="tgBtn">conectar Telegram</button>
     <button type="button" id="aboutBtn">✦ Claude</button>
+    <button type="button" id="passBtn">clave</button>
     <button type="button" id="logout">cerrar sesión</button>
   </p>
   <input type="file" id="filePick" accept="image/*" hidden>
@@ -269,7 +272,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
-<script src="js/config.js?v=202611171711"></script>
-<script src="js/app.js?v=202611171711"></script>
+<script src="js/config.js?v=202611191722"></script>
+<script src="js/app.js?v=202611191722"></script>
 </body>
 </html>
